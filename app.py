@@ -25,7 +25,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 3.1 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 3.2 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -93,15 +93,30 @@ if "quick_results" in st.session_state:
     a.metric("Kalshi markets", summary["markets"])
     b.metric("Sportsbook rows", summary["sportsbook_rows"])
     c.metric("Matched sides", summary["matched"])
-    st.subheader("Pregame eligibility — research only")
-    st.caption("Exact matched sides, cached independent kickoff, quote freshness, sportsbook disagreement and +5pp filter. No live-status, fee, settlement or execution approval.")
-    eligibility=eligibility_dashboard(st.session_state.get("quick_comparisons"), st.session_state.get("quick_odds_cache"), summary.get("time"))
-    st.session_state.quick_eligibility=eligibility
+    st.subheader("Opportunity dashboard — research only")
+    st.caption("Ranked exact matches using cached sportsbook data. No additional sportsbook requests.")
+    eligibility = eligibility_dashboard(st.session_state.get("quick_comparisons"), st.session_state.get("quick_odds_cache"), summary.get("time"))
+    st.session_state.quick_eligibility = eligibility
     if eligibility.empty:
-        st.info("No exact matched sides to assess. No verified trade.")
+        st.info("No exact matched sides. No verified trade.")
     else:
-        st.dataframe(eligibility, hide_index=True, use_container_width=True)
-        st.download_button("Export pregame eligibility CSV", eligibility.to_csv(index=False).encode("utf-8"), file_name="kalshi_pregame_eligibility.csv", mime="text/csv")
+        ranked = eligibility.sort_values("net_edge_pp_1share", ascending=False, na_position="last").reset_index(drop=True)
+        passing = int((pd.to_numeric(ranked["net_edge_pp_1share"], errors="coerce") >= 5).sum())
+        blocked = int((ranked["research_status"] == "BLOCKED").sum())
+        x, y, z = st.columns(3)
+        x.metric("Matched sides", len(ranked))
+        y.metric("+5pp preliminary", passing)
+        z.metric("Blocked", blocked)
+        st.dataframe(ranked[["event", "outcome_team", "side", "net_edge_pp_1share", "research_status", "reason"]].head(12), hide_index=True, use_container_width=True)
+        choice = st.selectbox("Select matched side — cached research only", range(len(ranked)),
+            format_func=lambda i: str(ranked.iloc[i]["event"]) + " | " + str(ranked.iloc[i]["outcome_team"]) + " " + str(ranked.iloc[i]["side"]),
+            key="opportunity_choice")
+        selected = ranked.iloc[choice]
+        st.caption("Ticker: {} | Kickoff: {} | Quotes: {} | Books: {}".format(selected["ticker"], selected["kickoff_status"], selected["quote_status"], selected["books"]))
+        st.warning("NO VERIFIED TRADE — " + str(selected["reason"]))
+        with st.expander("Full eligibility data and CSV export"):
+            st.dataframe(ranked, hide_index=True, use_container_width=True)
+            st.download_button("Export pregame eligibility CSV", ranked.to_csv(index=False).encode("utf-8"), file_name="kalshi_pregame_eligibility.csv", mime="text/csv")
     st.subheader("Paper scan decision")
     st.caption("Risk caps: 1% per position and 3% total open exposure; $5 and $15 respectively at a $500 bankroll.")
     st.caption("Fees and settlement rules are not independently verified per contract. No real-money recommendations.")
