@@ -13,7 +13,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 0.8 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 0.9 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -21,6 +21,57 @@ if "paper_exposure" not in st.session_state:
     st.session_state.paper_exposure = 0.0
 
 scan, odds_tab, edge_tab, evaluate_tab, queue_tab = st.tabs(["Market scan", "Outside odds", "Edge lab", "Evaluate", "Paper queue"])
+st.subheader("One-tap CFB / NFL paper scan")
+st.caption("Fetches Kalshi and sportsbook moneylines, matches pregame contracts, and checks promising depth. One sportsbook API request per league selected; manual tap only.")
+quick_league = st.selectbox("Scan league", ["CFB", "NFL"], key="quick_league")
+quick_bankroll = st.number_input("Paper bankroll for one-tap scan ($)", min_value=1.0, value=DEFAULT_BANKROLL, key="quick_bankroll")
+quick_exposure = st.number_input("Other open exposure ($)", min_value=0.0, value=0.0, key="quick_exposure")
+if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
+    api_key = st.secrets.get("ODDS_API_KEY", "")
+    if not api_key:
+        st.error("Add ODDS_API_KEY to Streamlit Secrets.")
+    else:
+        try:
+            with st.spinner("Fetching fresh markets and sportsbook prices..."):
+                quick_markets = fetch_sports_markets((quick_league,), 8)
+                quick_rows, quick_remaining = fetch_odds(api_key, quick_league)
+                quick_odds = pd.DataFrame(quick_rows)
+                quick_matches = compare(quick_markets, quick_odds)
+            st.session_state.quick_results = {
+                "league": quick_league,
+                "markets": len(quick_markets),
+                "sportsbook_rows": len(quick_odds),
+                "matched": len(quick_matches),
+                "remaining": quick_remaining,
+                "time": datetime.now(timezone.utc).isoformat(timespec="seconds")
+            }
+            st.session_state.quick_comparisons = quick_matches
+            st.session_state.quick_depth = scan_candidates(
+                quick_matches, quick_bankroll,
+                quick_exposure + st.session_state.paper_exposure)
+        except Exception as exc:
+            st.session_state.pop("quick_results", None)
+            st.session_state.pop("quick_comparisons", None)
+            st.session_state.pop("quick_depth", None)
+            st.error(f"Scan failed (no trade): {exc}")
+if "quick_results" in st.session_state:
+    summary = st.session_state.quick_results
+    st.caption(f"Last one-tap scan UTC: {summary['time']}; free API requests remaining: {summary['remaining'] or 'unknown'}")
+    a,b,c = st.columns(3)
+    a.metric("Kalshi markets", summary["markets"])
+    b.metric("Sportsbook rows", summary["sportsbook_rows"])
+    c.metric("Matched sides", summary["matched"])
+    if summary["matched"] == 0:
+        st.warning("NO TRADE: no safe matches. Check league, game start times, name mappings and quote freshness.")
+    elif st.session_state.quick_depth.empty:
+        st.info("NO TRADE: no preliminary match clears the +5pp edge filter.")
+    else:
+        st.dataframe(st.session_state.quick_depth, hide_index=True, use_container_width=True)
+    with st.expander("Preliminary matched comparisons"):
+        st.dataframe(st.session_state.quick_comparisons, hide_index=True, use_container_width=True)
+    st.warning("NO VERIFIED TRADE. Quotes and fees are estimates; injury/news, settlement rules and final synchronization are not validated. No orders placed.")
+st.divider()
+
 with scan:
     st.write("CFB / NFL single-market discovery. Quotes are read-only and may be stale.")
     leagues = st.multiselect("Leagues", ["CFB", "NFL"], default=["CFB", "NFL"])
