@@ -15,7 +15,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 1.3 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 1.3.1 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
