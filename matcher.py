@@ -74,6 +74,7 @@ def compare(markets, odds, now=None):
                 continue
             yes_team = [home if label == normalized(home) else away]
             valid = []
+            quote_ages = []
             seen_books = set()
             for _, book in group.iterrows():
                 start = parse_time(book.get("start"))
@@ -91,12 +92,16 @@ def compare(markets, odds, now=None):
                         continue
                     seen_books.add(book_id)
                     valid.append((book_id, fair))
+                    quote_ages.append((now-updated).total_seconds()/60)
                 except (ValueError, TypeError, ZeroDivisionError):
                     continue
             # Two independent books minimum, otherwise avoid fragile comparisons.
             if len({x[0] for x in valid}) < 2:
                 continue
             fair = median(v for _, v in valid)
+            low_fair = min(v for _, v in valid)
+            high_fair = max(v for _, v in valid)
+            book_details = "; ".join(f"{book_id}: {prob*100:.2f}%" for book_id,prob in sorted(valid))
             for side, p, col in (("YES", fair, "yes_ask_cents"),
                                  ("NO", 1-fair, "no_ask_cents")):
                 try:
@@ -108,7 +113,13 @@ def compare(markets, odds, now=None):
                     rows.append({"league": m["league"], "event": m["event"],
                         "ticker": m["ticker"], "side": side, "outcome_team": normalized(yes_team[0] if side == "YES" else (away if yes_team[0] == home else home)), "ask_cents": ask,
                         "fair_pct": round(p*100, 2), "net_edge_pp_1share": round(edge, 2),
-                        "books": len({x[0] for x in valid}), "status": "UNVERIFIED — DEPTH/RECHECK REQUIRED"})
+                        "books": len({x[0] for x in valid}),
+                        "book_low_pct": round((low_fair if side == "YES" else 1-high_fair)*100,2),
+                        "book_high_pct": round((high_fair if side == "YES" else 1-low_fair)*100,2),
+                        "book_spread_pp": round((high_fair-low_fair)*100,2),
+                        "oldest_quote_minutes": round(max(quote_ages),1),
+                        "book_estimates": book_details if side == "YES" else "; ".join(f"{bid}: {(1-prob)*100:.2f}%" for bid,prob in sorted(valid)),
+                        "status": "UNVERIFIED — DEPTH/RECHECK REQUIRED"})
                 except (TypeError, ValueError, KeyError):
                     continue
     return pd.DataFrame(rows).sort_values("net_edge_pp_1share", ascending=False) if rows else pd.DataFrame()
