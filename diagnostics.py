@@ -5,10 +5,10 @@ from matcher import parse_time
 import re
 from team_names import normalized
 
-def diagnostics(markets, odds):
+def diagnostics(markets, odds, now=None):
     if markets is None or odds is None or markets.empty or odds.empty:
         return pd.DataFrame()
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
     rows = []
     for (league, home, away), group in odds.groupby(["league", "home", "away"]):
         start = parse_time(group.iloc[0].get("start"))
