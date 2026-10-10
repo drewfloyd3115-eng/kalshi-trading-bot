@@ -182,7 +182,7 @@ if (isinstance(matches,pd.DataFrame) and not matches.empty
     market=market_rows.get(validation_ticker)
     if market is not None:
         import re
-        parts=re.split(r"\\s+(?:vs\\.?|versus|at|@)\\s+",str(market.get("event","")),flags=re.I)
+        parts=re.split(r"\s+(?:vs\.?|versus|at|@)\s+",str(market.get("event","")),flags=re.I)
         if len(parts)==2:
             team_pair={normalized(x) for x in parts}
             possible=odds_cache[odds_cache.apply(
