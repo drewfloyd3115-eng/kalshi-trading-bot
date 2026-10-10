@@ -12,8 +12,6 @@ def _levels(raw):
     for row in raw:
         try:
             price, size = float(row[0]), float(row[1])
-            if price <= 1:
-                price *= 100
             if 0 < price < 100 and size > 0:
                 levels.append((round(price, 2), int(size)))
         except (TypeError, ValueError, IndexError):
