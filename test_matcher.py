@@ -7,6 +7,9 @@ from config import MAX_TRADE_BANKROLL_PCT,MAX_TOTAL_EXPOSURE_PCT
 from matcher import compare
 from diagnostics import diagnostics
 from coverage_funnel import coverage_funnel
+from paper_journal import journal_rows
+from unittest.mock import patch
+from integrated_scan import scan_candidates
 
 NOW=datetime(2026,10,10,16,0,tzinfo=timezone.utc)
 def fixtures():
@@ -44,6 +47,20 @@ class MatcherRegression(unittest.TestCase):
         for row in result:
             if row.get("cost") is not None:
                 self.assertLessEqual(row["cost"],5.00001)
+    def test_paper_journal_deduplicates_equivalent_routes(self):
+        m,o=fixtures()
+        rows=journal_rows(compare(m,o,NOW),"CFB")
+        self.assertEqual(len(rows),2)
+        self.assertFalse(rows["fee_verified"].any())
+    def test_depth_fee_and_budget(self):
+        m,o=fixtures()
+        matches=compare(m,o,NOW)
+        matches.loc[:,"net_edge_pp_1share"]=10.0
+        snapshot={"status":"DEPTH SNAPSHOT — NOT VERIFIED TRADE","levels":[(40,5),(45,20)],"best_ask_cents":40,"checked_utc":"test"}
+        with patch("integrated_scan.inspect",return_value=snapshot):
+            result=scan_candidates(matches,500,0,max_checks=1)
+        self.assertEqual(len(result),1)
+        self.assertLessEqual(float(result.iloc[0]["estimated_cost"]),5.0)
     def test_no_vig_even(self):
         a,b=no_vig(-110,-110)
         self.assertAlmostEqual(a,0.5)
