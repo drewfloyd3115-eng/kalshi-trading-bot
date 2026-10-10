@@ -2,6 +2,7 @@
 import re
 from datetime import datetime, timezone, timedelta
 import pandas as pd
+from statistics import median
 from edge_engine import no_vig, taker_fee
 from team_names import normalized
 
@@ -73,10 +74,11 @@ def compare(markets, odds, now=None):
                 continue
             yes_team = [home if label == normalized(home) else away]
             valid = []
+            seen_books = set()
             for _, book in group.iterrows():
                 start = parse_time(book.get("start"))
                 updated = parse_time(book.get("updated"))
-                if not start or start <= now or not updated or updated > now + timedelta(minutes=2) or now - updated > timedelta(minutes=15):
+                if not start or abs((start-kickoff).total_seconds()) > 60 or start <= now or not updated or updated > now + timedelta(minutes=2) or now - updated > timedelta(minutes=15):
                     continue
                 try:
                     a, b = normalized(book["team_a"]), normalized(book["team_b"])
@@ -84,13 +86,17 @@ def compare(markets, odds, now=None):
                         continue
                     fy, fn = no_vig(float(book["odds_a"]), float(book["odds_b"]))
                     fair = fy if a == normalized(yes_team[0]) else fn
-                    valid.append((book["book"], fair))
+                    book_id = str(book.get("book_key") or book.get("book") or "").strip().lower()
+                    if not book_id or book_id in seen_books:
+                        continue
+                    seen_books.add(book_id)
+                    valid.append((book_id, fair))
                 except (ValueError, TypeError, ZeroDivisionError):
                     continue
             # Two independent books minimum, otherwise avoid fragile comparisons.
             if len({x[0] for x in valid}) < 2:
                 continue
-            fair = sorted(v for _, v in valid)[len(valid)//2]
+            fair = median(v for _, v in valid)
             for side, p, col in (("YES", fair, "yes_ask_cents"),
                                  ("NO", 1-fair, "no_ask_cents")):
                 try:
