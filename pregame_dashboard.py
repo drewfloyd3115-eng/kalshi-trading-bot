@@ -27,7 +27,7 @@ def eligibility_dashboard(matches, odds, scan_time=None, now=None):
             # Match by event identity using the same exact opponent names as matcher.
             from team_names import normalized
             import re
-            parts = re.split(r"\\s+(?:vs\\.?|versus|at|@)\\s+", event, flags=re.I)
+            parts = re.split(r"\s+(?:vs\.?|versus|at|@)\s+", event, flags=re.I)
             if len(parts) == 2 and {"home", "away"}.issubset(odds.columns):
                 pair = {normalized(x) for x in parts}
                 same = odds[odds.apply(lambda r:
