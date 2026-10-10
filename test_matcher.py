@@ -11,6 +11,7 @@ from paper_journal import journal_rows
 from paper_history import import_history, summary as paper_summary
 from unittest.mock import patch
 from integrated_scan import scan_candidates
+from contract_validation import validate_contract
 
 NOW=datetime(2026,10,10,16,0,tzinfo=timezone.utc)
 def fixtures():
@@ -86,6 +87,23 @@ class MatcherRegression(unittest.TestCase):
         journal["settlement_result"]="WIN"
         stats=paper_summary(import_history(journal.to_csv(index=False).encode("utf-8")))
         self.assertAlmostEqual(stats["gross_pnl"],1.2)
+    def test_contract_validation_depth_no_verification(self):
+        market={"market":{"status":"open","rules_primary":"Winner is team A","fee_type":"quadratic"}}
+        book={"yes_bids":[[40,5]],"no_bids":[[70,2],[65,3]]}
+        with patch("contract_validation._get",return_value=market),patch("contract_validation.fetch_orderbook",return_value=book):
+            result=validate_contract("TEST-MARKET","YES",4)
+        self.assertEqual(result["best_ask_cents"],30)
+        self.assertEqual(result["shares_available"],4)
+        self.assertTrue(result["depth_complete"])
+        self.assertFalse(result["fee_schedule_verified"])
+        self.assertFalse(result["settlement_rules_verified"])
+        self.assertFalse(result["executable_price_verified"])
+        self.assertEqual(result["status"],"NO VERIFIED TRADE")
+    def test_contract_validation_rejects_closed_market(self):
+        with patch("contract_validation._get",return_value={"market":{"status":"closed"}}):
+            result=validate_contract("TEST-MARKET","NO",1)
+        self.assertEqual(result["shares_available"],0)
+        self.assertEqual(result["status"],"NO VERIFIED TRADE")
     def test_no_vig_even(self):
         a,b=no_vig(-110,-110)
         self.assertAlmostEqual(a,0.5)
