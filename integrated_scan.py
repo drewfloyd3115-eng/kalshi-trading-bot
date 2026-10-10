@@ -28,21 +28,26 @@ def scan_candidates(matches, bankroll, exposure, max_checks=5):
                     record["reason"] = snapshot.get("reason", "No usable depth")
                 else:
                     levels = snapshot["levels"]
-                    count, gross = 0, 0.0
+                    count, gross, fee = 0, 0.0, 0.0
+                    # Charge estimated fees per executed depth level, not on the last level alone.
+                    fills = []
                     for ask, qty in levels:
+                        level_count = 0
                         for _ in range(int(qty)):
-                            proposed_count = count + 1
+                            next_level_count = level_count + 1
+                            proposed_fee = (fee - (taker_fee(ask, level_count) if level_count else 0)
+                                            + taker_fee(ask, next_level_count))
                             proposed_gross = gross + ask/100
-                            fee = taker_fee(ask, proposed_count)
-                            if proposed_gross + fee > budget + 1e-9:
+                            if proposed_gross + proposed_fee > budget + 1e-9:
                                 break
-                            count, gross = proposed_count, proposed_gross
-                        if gross + taker_fee(ask, count) >= budget:
-                            break
+                            gross, fee = proposed_gross, proposed_fee
+                            level_count, count = next_level_count, count + 1
+                        if level_count:
+                            fills.append((ask, level_count))
+                    fee = sum(taker_fee(price, qty) for price, qty in fills)
                     if count == 0:
                         record["reason"] = "No affordable shares at depth"
                     else:
-                        fee = taker_fee(gross*100/count, count)
                         edge = float(row["fair_pct"]) - 100*(gross+fee)/count
                         record.update(shares=count, estimated_cost=round(gross+fee,2),
                                       net_edge_pp=round(edge,2),
