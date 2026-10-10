@@ -4,11 +4,11 @@ import pandas as pd
 from datetime import datetime, timezone
 from config import DEFAULT_BANKROLL
 from risk import evaluate
-from scanner import fetch_markets
+from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 0.1 • Research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 0.2 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -17,20 +17,44 @@ if "paper_exposure" not in st.session_state:
 
 scan, evaluate_tab, queue_tab = st.tabs(["Market scan", "Evaluate", "Paper queue"])
 with scan:
-    st.write("Public open markets; no Kalshi credentials required.")
-    if st.button("Refresh market snapshot", type="primary"):
-        try:
-            st.session_state.markets = fetch_markets()
-            st.session_state.snapshot_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        except Exception as exc:
-            st.error(f"Market feed unavailable: {exc}")
+    st.write("CFB / NFL single-market discovery. Quotes are read-only and may be stale.")
+    leagues = st.multiselect("Leagues", ["CFB", "NFL"], default=["CFB", "NFL"])
+    pages = st.slider("Pages to scan (1,000 markets per page)", 1, 20, 8)
+    if st.button("Scan CFB / NFL", type="primary"):
+        if not leagues:
+            st.warning("Choose at least one league.")
+        else:
+            try:
+                with st.spinner("Reading public markets..."):
+                    st.session_state.markets = fetch_sports_markets(tuple(leagues), pages)
+                    st.session_state.snapshot_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            except Exception as exc:
+                st.error(f"Market feed unavailable: {exc}")
     if "markets" in st.session_state:
-        st.caption(f"Retrieved (UTC): {st.session_state.snapshot_at}. Only first 200 open markets; not a comprehensive sports scan.")
+        st.caption(f"Retrieved (UTC): {st.session_state.snapshot_at}. Results are limited by pages and ticker filters; not exhaustive.")
         df = st.session_state.markets
-        query = st.text_input("Filter title or ticker (e.g., NFL, football)")
-        if query:
-            df = df[df["title"].str.contains(query, case=False, na=False) | df["ticker"].str.contains(query, case=False, na=False)]
-        st.dataframe(df, hide_index=True, use_container_width=True)
+        if df.empty:
+            st.info("No matching markets found. Sports tickers may have changed, or more pages may be needed.")
+        else:
+            st.metric("Matching markets", len(df))
+            query = st.text_input("Search teams, title or ticker")
+            if query:
+                df = df[df["title"].str.contains(query, case=False, na=False) | df["ticker"].str.contains(query, case=False, na=False)]
+            st.dataframe(df, hide_index=True, use_container_width=True)
+    st.divider()
+    st.subheader("Order-book lookup")
+    depth_ticker = st.text_input("Exact Kalshi market ticker for depth")
+    if st.button("Fetch public order book"):
+        if not depth_ticker.strip():
+            st.warning("Enter a ticker.")
+        else:
+            try:
+                book = fetch_orderbook(depth_ticker.strip())
+                st.caption("These are BID levels, not executable asks. Opposite-side bids imply asks, subject to order-book semantics and freshness.")
+                st.json(book)
+            except Exception as exc:
+                st.error(f"Order-book lookup failed: {exc}")
+    st.info("NO VERIFIED EDGE: external no-vig odds, injury context and synchronized fair probabilities are not integrated. Do not treat quotes as trade recommendations.")
 
 with evaluate_tab:
     st.info("Enter an independently estimated probability. The app does not estimate fair probabilities yet. NO price must be the executable NO ask, not 1 minus the YES ask.")
