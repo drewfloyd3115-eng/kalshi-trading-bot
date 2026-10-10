@@ -8,11 +8,12 @@ from edge_engine import no_vig, assess, taker_fee
 from outside_odds import fetch_odds
 from matcher import compare
 from liquidity import inspect
+from integrated_scan import scan_candidates
 from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 0.7 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 0.8 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -96,6 +97,32 @@ with odds_tab:
                     st.warning("These are preliminary one-share estimates only. Liquidity, precise fees, line movement, injuries and immediate rechecks are NOT validated. DO NOT EXECUTE.")
             except Exception as exc:
                 st.error(f"Matching failed: {exc}")
+    st.divider()
+    st.subheader("Integrated paper scanner")
+    st.caption("Checks only preliminary matches with at least +5pp estimated edge. Limited to five fresh order-book lookups; no automatic orders.")
+    scan_bankroll = st.number_input("Scanner paper bankroll ($)", min_value=1.0, value=DEFAULT_BANKROLL, key="scan_bankroll")
+    scan_exposure = st.number_input("Other open exposure for scanner ($)", min_value=0.0, value=0.0, key="scan_exposure")
+    if st.button("Run integrated paper scan"):
+        if "matched" not in st.session_state or st.session_state.matched.empty:
+            st.warning("Run a fresh market scan, fetch sportsbook odds, and compare markets first.")
+        else:
+            try:
+                from datetime import datetime, timezone
+                def recent(key, minutes):
+                    timestamp = datetime.fromisoformat(st.session_state.get(key, "2000-01-01T00:00:00+00:00").replace("Z","+00:00"))
+                    return (datetime.now(timezone.utc)-timestamp).total_seconds() <= minutes*60
+                if not recent("snapshot_at", 5) or not recent("odds_at", 5):
+                    st.warning("NO TRADE: market or sportsbook snapshots are older than 5 minutes. Refresh both and rerun comparison.")
+                else:
+                    results = scan_candidates(st.session_state.matched, scan_bankroll,
+                                              scan_exposure + st.session_state.paper_exposure)
+                    if results.empty:
+                        st.info("NO TRADE: no preliminary match clears +5pp to warrant liquidity lookup.")
+                    else:
+                        st.dataframe(results, hide_index=True, use_container_width=True)
+                    st.warning("PAPER RESEARCH ONLY. Fees are estimated; injury status, market rules and fully synchronized sportsbook quotes remain unverified. No orders placed.")
+            except Exception as exc:
+                st.error(f"Integrated scan failed: {exc}")
     st.divider()
     st.subheader("Recheck executable liquidity")
     st.caption("Choose an exact matched ticker and side. This fetches a fresh public order book; it does not place an order.")
