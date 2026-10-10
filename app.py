@@ -19,7 +19,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 2.2 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 2.3 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -79,6 +79,8 @@ if "quick_results" in st.session_state:
     a.metric("Kalshi markets", summary["markets"])
     b.metric("Sportsbook rows", summary["sportsbook_rows"])
     c.metric("Matched sides", summary["matched"])
+    st.subheader("Paper scan decision")
+    st.caption("Fees and settlement rules are not independently verified per contract. No real-money recommendations.")
     if summary["matched"] == 0:
         st.warning("NO TRADE: no safe matches. Check league, game start times, name mappings and quote freshness.")
     elif st.session_state.quick_depth.empty:
@@ -86,6 +88,9 @@ if "quick_results" in st.session_state:
     else:
         st.dataframe(st.session_state.quick_depth, hide_index=True, use_container_width=True)
     if not st.session_state.quick_comparisons.empty:
+        best = st.session_state.quick_comparisons.iloc[0]
+        st.metric("Best preliminary edge", "{:+.2f} pp".format(best["net_edge_pp_1share"]))
+        st.caption("Leading outcome: {} | {} | ask {} cents. Not executable or fee-verified.".format(best["outcome_team"],best["side"],best["ask_cents"]))
         st.subheader("Best preliminary edges")
         st.dataframe(st.session_state.quick_comparisons.head(10), hide_index=True, use_container_width=True)
     with st.expander("Equivalent outcome routes — indicative prices only"):
