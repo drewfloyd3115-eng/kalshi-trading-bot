@@ -18,7 +18,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 1.7 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 1.8 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -101,6 +101,9 @@ if "quick_results" in st.session_state:
     with st.expander("Event and outcome audit — export for review"):
         st.caption("Possible game/event matches only. Outcome and settlement rules are not independently verified.")
         st.dataframe(st.session_state.get("quick_event_audit", pd.DataFrame()), hide_index=True, use_container_width=True)
+    with st.expander("Sportsbook probability quality audit"):
+        st.caption("Per-book no-vig estimates, consensus spread, and oldest quote age. A wide spread signals disagreement, not confirmed value.")
+        st.dataframe(st.session_state.quick_comparisons, hide_index=True, use_container_width=True)
     with st.expander("Preliminary matched comparisons"):
         st.dataframe(st.session_state.quick_comparisons, hide_index=True, use_container_width=True)
     st.warning("NO VERIFIED TRADE. Quotes and fees are estimates; injury/news, settlement rules and final synchronization are not validated. No orders placed.")
