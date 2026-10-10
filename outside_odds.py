@@ -26,7 +26,7 @@ def fetch_odds(api_key, league):
                     continue
                 rows.append({"league": league, "home": event.get("home_team"),
                     "away": event.get("away_team"), "start": event.get("commence_time"),
-                    "book": book.get("title"), "updated": market.get("last_update") or book.get("last_update"),
+                    "book": book.get("title"), "book_key": book.get("key"), "event_id": event.get("id"), "updated": market.get("last_update") or book.get("last_update"),
                     "team_a": outcomes[0].get("name"), "odds_a": outcomes[0].get("price"),
                     "team_b": outcomes[1].get("name"), "odds_b": outcomes[1].get("price")})
     return rows, response.headers.get("x-requests-remaining")
