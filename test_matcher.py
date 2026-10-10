@@ -11,7 +11,7 @@ from paper_journal import journal_rows
 from paper_history import import_history, summary as paper_summary
 from unittest.mock import patch
 from integrated_scan import scan_candidates
-from contract_validation import validate_contract
+from contract_validation import validate_contract, timing_gate
 
 NOW=datetime(2026,10,10,16,0,tzinfo=timezone.utc)
 def fixtures():
@@ -103,6 +103,18 @@ class MatcherRegression(unittest.TestCase):
         with patch("contract_validation._get",return_value={"market":{"status":"closed"}}):
             result=validate_contract("TEST-MARKET","NO",1)
         self.assertEqual(result["shares_available"],0)
+        self.assertEqual(result["status"],"NO VERIFIED TRADE")
+    def test_unknown_kickoff_fails_closed(self):
+        self.assertIn("UNKNOWN",timing_gate(None,NOW))
+        self.assertIn("BLOCKED",timing_gate((NOW-timedelta(minutes=1)).isoformat(),NOW))
+        self.assertEqual(timing_gate((NOW+timedelta(hours=1)).isoformat(),NOW),"PREGAME")
+    def test_active_market_does_not_prove_pregame(self):
+        market={"market":{"status":"active","rules_primary":"Winner"}}
+        book={"yes_bids":[],"no_bids":[[97,2]]}
+        with patch("contract_validation._get",return_value=market),patch("contract_validation.fetch_orderbook",return_value=book):
+            result=validate_contract("TEST-MARKET","YES",1)
+        self.assertIn("UNKNOWN",result["pregame_timing"])
+        self.assertFalse(result["executable_price_verified"])
         self.assertEqual(result["status"],"NO VERIFIED TRADE")
     def test_no_vig_even(self):
         a,b=no_vig(-110,-110)
