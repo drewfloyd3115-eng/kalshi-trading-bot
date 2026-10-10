@@ -19,11 +19,12 @@ from integrated_scan import scan_candidates
 from paper_journal import journal_rows
 from paper_history import import_history, summary as paper_summary, HISTORY_COLUMNS
 from contract_validation import validate_contract
+from inspection_diagnostics import explain
 from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 2.9 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 3.0 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -200,7 +201,23 @@ if st.button("Inspect contract — no orders",disabled=not validation_ticker.str
     st.session_state.validation_result=validate_contract(validation_ticker.strip(),validation_side,int(validation_shares),kickoff_utc=kickoff_utc)
 if "validation_result" in st.session_state:
     v=st.session_state.validation_result
-    st.error("NO VERIFIED TRADE — "+str(v.get("reason","")))
+    comparison=None
+    comparison_rows=st.session_state.get("quick_comparisons")
+    scan_details=st.session_state.get("quick_results",{})
+    latest=parse_time(scan_details.get("time")) if isinstance(scan_details,dict) else None
+    if (isinstance(comparison_rows,pd.DataFrame) and not comparison_rows.empty
+        and latest and -120 <= (datetime.now(timezone.utc)-latest).total_seconds() <= 300):
+        selected=comparison_rows[(comparison_rows["ticker"].astype(str)==str(v.get("ticker",""))) &
+                                 (comparison_rows["side"].astype(str)==str(v.get("side","")))]
+        if not selected.empty:
+            comparison=selected.iloc[0].to_dict()
+    diagnosis=explain(v,comparison)
+    st.error("NO VERIFIED TRADE")
+    st.markdown("**Why this contract is blocked**")
+    for reason in diagnosis["reasons"]:
+        st.write("• "+reason)
+    st.metric("Preliminary net edge (1 share)",f'{diagnosis["edge_pp"]:+.2f} pp' if diagnosis["edge_pp"] is not None else "Unavailable")
+    st.caption("Edge filter: "+diagnosis["edge_filter"]+". The +5pp requirement is not a trade approval. No extra sportsbook requests were made.")
     st.markdown("**Contract inspection summary**")
     st.write(contract_label(str(v.get("ticker",""))))
     st.caption("Side: "+str(v.get("side",""))+" | Kickoff: "+str(v.get("kickoff_utc") or "Unverified")+" | Timing: "+str(v.get("pregame_timing","UNKNOWN")))
