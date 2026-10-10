@@ -7,13 +7,14 @@ from risk import evaluate
 from edge_engine import no_vig, assess, taker_fee
 from outside_odds import fetch_odds
 from matcher import compare
+from diagnostics import diagnostics
 from liquidity import inspect
 from integrated_scan import scan_candidates
 from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 0.9 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 1.0 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -45,6 +46,7 @@ if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
                 "remaining": quick_remaining,
                 "time": datetime.now(timezone.utc).isoformat(timespec="seconds")
             }
+            st.session_state.quick_diagnostics = diagnostics(quick_markets, quick_odds)
             st.session_state.quick_comparisons = quick_matches
             st.session_state.quick_depth = scan_candidates(
                 quick_matches, quick_bankroll,
@@ -52,6 +54,7 @@ if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
         except Exception as exc:
             st.session_state.pop("quick_results", None)
             st.session_state.pop("quick_comparisons", None)
+            st.session_state.pop("quick_diagnostics", None)
             st.session_state.pop("quick_depth", None)
             st.error(f"Scan failed (no trade): {exc}")
 if "quick_results" in st.session_state:
@@ -67,6 +70,11 @@ if "quick_results" in st.session_state:
         st.info("NO TRADE: no preliminary match clears the +5pp edge filter.")
     else:
         st.dataframe(st.session_state.quick_depth, hide_index=True, use_container_width=True)
+    if not st.session_state.quick_comparisons.empty:
+        st.subheader("Best preliminary edges")
+        st.dataframe(st.session_state.quick_comparisons.head(10), hide_index=True, use_container_width=True)
+    with st.expander("Coverage diagnostics — why games were excluded"):
+        st.dataframe(st.session_state.get("quick_diagnostics", pd.DataFrame()), hide_index=True, use_container_width=True)
     with st.expander("Preliminary matched comparisons"):
         st.dataframe(st.session_state.quick_comparisons, hide_index=True, use_container_width=True)
     st.warning("NO VERIFIED TRADE. Quotes and fees are estimates; injury/news, settlement rules and final synchronization are not validated. No orders placed.")
