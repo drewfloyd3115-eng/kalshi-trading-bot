@@ -25,7 +25,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 3.2 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 3.3 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -94,48 +94,45 @@ if "quick_results" in st.session_state:
     b.metric("Sportsbook rows", summary["sportsbook_rows"])
     c.metric("Matched sides", summary["matched"])
     st.subheader("Opportunity dashboard — research only")
-    st.caption("Ranked exact matches using cached sportsbook data. No additional sportsbook requests.")
+    st.caption("Top five preliminary matches. Cached data only; no extra sportsbook requests.")
     eligibility = eligibility_dashboard(st.session_state.get("quick_comparisons"), st.session_state.get("quick_odds_cache"), summary.get("time"))
     st.session_state.quick_eligibility = eligibility
     if eligibility.empty:
-        st.info("No exact matched sides. No verified trade.")
+        st.info("No exact matched sides. NO VERIFIED TRADE.")
     else:
         ranked = eligibility.sort_values("net_edge_pp_1share", ascending=False, na_position="last").reset_index(drop=True)
-        passing = int((pd.to_numeric(ranked["net_edge_pp_1share"], errors="coerce") >= 5).sum())
+        edges = pd.to_numeric(ranked["net_edge_pp_1share"], errors="coerce")
+        passing = int((edges >= 5).sum())
         blocked = int((ranked["research_status"] == "BLOCKED").sum())
         x, y, z = st.columns(3)
-        x.metric("Matched sides", len(ranked))
-        y.metric("+5pp preliminary", passing)
+        x.metric("Matched", len(ranked))
+        y.metric("+5pp", passing)
         z.metric("Blocked", blocked)
-        st.dataframe(ranked[["event", "outcome_team", "side", "net_edge_pp_1share", "research_status", "reason"]].head(12), hide_index=True, use_container_width=True)
-        choice = st.selectbox("Select matched side — cached research only", range(len(ranked)),
-            format_func=lambda i: str(ranked.iloc[i]["event"]) + " | " + str(ranked.iloc[i]["outcome_team"]) + " " + str(ranked.iloc[i]["side"]),
-            key="opportunity_choice")
-        selected = ranked.iloc[choice]
-        st.caption("Ticker: {} | Kickoff: {} | Quotes: {} | Books: {}".format(selected["ticker"], selected["kickoff_status"], selected["quote_status"], selected["books"]))
-        st.warning("NO VERIFIED TRADE — " + str(selected["reason"]))
-        with st.expander("Full eligibility data and CSV export"):
+        prices = st.session_state.get("quick_comparisons", pd.DataFrame())
+        for i, row in ranked.head(5).iterrows():
+            edge = pd.to_numeric(row["net_edge_pp_1share"], errors="coerce")
+            label = "{:+.2f}pp".format(edge) if pd.notna(edge) else "N/A"
+            matched_price = prices[(prices["ticker"] == row["ticker"]) & (prices["side"] == row["side"])] if isinstance(prices, pd.DataFrame) and not prices.empty else pd.DataFrame()
+            ask = str(matched_price.iloc[0]["ask_cents"]) + "¢" if not matched_price.empty else "unavailable"
+            with st.expander("{} — {} {} | {}".format(row["event"], row["outcome_team"], row["side"], label), expanded=(i == 0)):
+                st.write("Indicative ask: {} | Kickoff: {}".format(ask, row["kickoff_status"]))
+                st.caption("Books: {} | Quotes: {}".format(row["books"], row["quote_status"]))
+                st.write("**Status:** " + str(row["research_status"]))
+                st.write("**Reason:** " + str(row["reason"]))
+                st.caption("Ticker: " + str(row["ticker"]))
+        with st.expander("All matches and CSV export"):
             st.dataframe(ranked, hide_index=True, use_container_width=True)
             st.download_button("Export pregame eligibility CSV", ranked.to_csv(index=False).encode("utf-8"), file_name="kalshi_pregame_eligibility.csv", mime="text/csv")
     st.subheader("Paper scan decision")
-    st.caption("Risk caps: 1% per position and 3% total open exposure; $5 and $15 respectively at a $500 bankroll.")
-    st.caption("Fees and settlement rules are not independently verified per contract. No real-money recommendations.")
+    st.caption("Risk limits: 1% per position, 3% total exposure. Fee schedules, settlement and execution remain unverified.")
     if summary["matched"] == 0:
-        st.warning("NO TRADE: no safe matches. Check league, game start times, name mappings and quote freshness.")
+        st.info("NO TRADE: no exact matches.")
     elif st.session_state.quick_depth.empty:
-        st.info("NO TRADE: no preliminary match clears the +5pp edge filter.")
+        st.info("NO TRADE: no candidate clears the preliminary +5pp filter.")
     else:
         st.dataframe(st.session_state.quick_depth, hide_index=True, use_container_width=True)
-    if not st.session_state.quick_comparisons.empty:
-        best = st.session_state.quick_comparisons.iloc[0]
-        st.metric("Best preliminary edge", "{:+.2f} pp".format(best["net_edge_pp_1share"]))
-        st.caption("Leading outcome: {} | {} | ask {} cents. Not executable or fee-verified.".format(best["outcome_team"],best["side"],best["ask_cents"]))
-        st.subheader("Best preliminary edges")
-        compact=st.session_state.quick_comparisons.head(10)[["outcome_team","side","ask_cents","fair_pct","net_edge_pp_1share"]].copy()
-        compact.columns=["Team","Side","Ask ¢","Fair %","Edge pp"]
-        st.dataframe(compact, hide_index=True, use_container_width=True)
-        with st.expander("Full comparison data — export"):
-            st.dataframe(st.session_state.quick_comparisons, hide_index=True, use_container_width=True)
+    with st.expander("Additional preliminary edge comparisons"):
+        st.dataframe(st.session_state.get("quick_comparisons", pd.DataFrame()), hide_index=True, use_container_width=True)
     with st.expander("Paper scan journal — export CSV"):
         st.caption("One indicative route per winning outcome. Session-only; download the CSV to preserve it. No trades are placed and no results are settled.")
         journal = st.session_state.get("paper_scan_journal", pd.DataFrame())
