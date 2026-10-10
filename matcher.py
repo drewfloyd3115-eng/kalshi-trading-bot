@@ -60,7 +60,7 @@ def compare(markets, odds, now=None):
             label = normalized(m.get("yes_sub_title", ""))
             if label not in (normalized(home), normalized(away)) or normalized(home) == normalized(away):
                 continue
-            date_match = _re.search(r"-(\d{2})([A-Z]{3})(\d{1,2})(?:-|$)", str(m.get("ticker", "")).upper())
+            date_match = _re.search(r"-(\d{2})([A-Z]{3})(\d{2})(?=[A-Z])", str(m.get("ticker", "")).upper())
             months = {x:i for i,x in enumerate(("JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"),1)}
             if not date_match or date_match.group(2) not in months:
                 continue
