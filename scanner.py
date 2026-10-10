@@ -77,8 +77,35 @@ def fetch_sports_markets(leagues=("CFB", "NFL"), max_pages=12):
     return pd.DataFrame(list(found.values()), columns=COLUMNS)
 
 def fetch_orderbook(ticker):
-    """Public depth snapshot for a specific market; bids are not asks."""
+    """Return bid levels with normalized CENT prices and share counts.
+
+    Kalshi's current response uses orderbook_fp with dollar-denominated prices.
+    Legacy orderbook prices were integer cents. Never silently equate an
+    unrecognized response format with an empty book.
+    """
     data = _get("/markets/" + requests.utils.quote(ticker, safe="") + "/orderbook")
-    book = data.get("orderbook", {})
-    return {"yes_bids": book.get("yes") or book.get("yes_dollars") or [],
-            "no_bids": book.get("no") or book.get("no_dollars") or []}
+    if isinstance(data.get("orderbook_fp"), dict):
+        book = data["orderbook_fp"]
+        yes, no = book.get("yes_dollars", []), book.get("no_dollars", [])
+        multiplier = 100
+    elif isinstance(data.get("orderbook"), dict):
+        book = data["orderbook"]
+        yes, no = book.get("yes", []), book.get("no", [])
+        if isinstance(yes, dict):
+            yes = yes.get("bids", [])
+        if isinstance(no, dict):
+            no = no.get("bids", [])
+        multiplier = 1
+    else:
+        raise ValueError("Unrecognized Kalshi order-book response; cannot verify liquidity")
+    def normalize(levels):
+        result = []
+        for level in levels or []:
+            try:
+                price, quantity = float(level[0])*multiplier, float(level[1])
+                if 0 < price < 100 and quantity > 0:
+                    result.append([round(price, 4), quantity])
+            except (ValueError, TypeError, IndexError):
+                continue
+        return result
+    return {"yes_bids": normalize(yes), "no_bids": normalize(no)}
