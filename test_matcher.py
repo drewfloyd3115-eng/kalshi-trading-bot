@@ -2,7 +2,8 @@
 import unittest
 from datetime import datetime,timezone,timedelta
 import pandas as pd
-from edge_engine import no_vig,taker_fee
+from edge_engine import no_vig,taker_fee,assess
+from config import MAX_TRADE_BANKROLL_PCT,MAX_TOTAL_EXPOSURE_PCT
 from matcher import compare
 from diagnostics import diagnostics
 from coverage_funnel import coverage_funnel
@@ -35,6 +36,14 @@ class MatcherRegression(unittest.TestCase):
         funnel=coverage_funnel(o,diag,matches,m)
         self.assertEqual(funnel.iloc[0]["status"],"MATCHED")
         self.assertEqual(int(funnel.iloc[0]["matched_contract_sides"]),2)
+    def test_risk_caps_are_fractions(self):
+        self.assertAlmostEqual(MAX_TRADE_BANKROLL_PCT,0.01)
+        self.assertAlmostEqual(MAX_TOTAL_EXPOSURE_PCT,0.03)
+    def test_position_cost_below_one_percent(self):
+        result=assess(-110,-110,40,60,500,0,available_yes=1000,available_no=1000)
+        for row in result:
+            if row.get("cost") is not None:
+                self.assertLessEqual(row["cost"],5.00001)
     def test_no_vig_even(self):
         a,b=no_vig(-110,-110)
         self.assertAlmostEqual(a,0.5)
