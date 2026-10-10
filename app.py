@@ -16,11 +16,12 @@ from fee_analysis import fee_analysis
 from liquidity import inspect
 from integrated_scan import scan_candidates
 from paper_journal import journal_rows
+from paper_history import import_history, summary as paper_summary, HISTORY_COLUMNS
 from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 2.5 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 2.6 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -134,6 +135,38 @@ if "quick_results" in st.session_state:
     with st.expander("Preliminary matched comparisons"):
         st.dataframe(st.session_state.quick_comparisons, hide_index=True, use_container_width=True)
     st.warning("NO VERIFIED TRADE. Quotes and fees are estimates; injury/news, settlement rules and final synchronization are not validated. No orders placed.")
+st.subheader("Paper history — import and export")
+st.caption("Import saved paper journal CSVs without making sportsbook API calls. Observations are not paper fills. No settlement or profit is inferred from an observed quote.")
+if "paper_history" not in st.session_state:
+    st.session_state.paper_history = pd.DataFrame(columns=HISTORY_COLUMNS)
+imports=st.file_uploader("Import prior paper scan or history CSVs",type=["csv"],accept_multiple_files=True,key="history_imports")
+if st.button("Import selected CSVs — offline",disabled=not imports):
+    try:
+        incoming=[import_history(f.getvalue()) for f in imports]
+        merged=pd.concat([st.session_state.paper_history]+incoming,ignore_index=True)
+        st.session_state.paper_history=import_history(merged.to_csv(index=False).encode("utf-8"))
+        st.success("Imported saved paper observations. No fills or settlements assumed.")
+    except Exception as exc:
+        st.error("Import rejected: {}".format(exc))
+if "paper_scan_journal" in st.session_state and not st.session_state.paper_scan_journal.empty:
+    if st.button("Add current scan to paper history — offline"):
+        merged=pd.concat([st.session_state.paper_history,import_history(st.session_state.paper_scan_journal.to_csv(index=False).encode("utf-8"))],ignore_index=True)
+        st.session_state.paper_history=import_history(merged.to_csv(index=False).encode("utf-8"))
+        st.success("Current scan saved to this session. Download the history CSV to keep it.")
+history=st.session_state.paper_history
+stats=paper_summary(history)
+a,b,c=st.columns(3)
+a.metric("Observed outcomes",stats["observations"])
+b.metric("Paper fills",stats["paper_fills"])
+c.metric("Closed paper positions",stats["closed"])
+if stats["closed"]:
+    st.metric("Gross hypothetical P&L (fees excluded)", "${:.2f}".format(stats["gross_pnl"]))
+else:
+    st.info("No closed paper positions. Win rate and hypothetical P&L are not available.")
+with st.expander("Paper history records — offline"):
+    st.dataframe(history,hide_index=True,use_container_width=True)
+st.download_button("Download combined paper history CSV",history.to_csv(index=False).encode("utf-8"),file_name="kalshi_paper_history.csv",mime="text/csv",disabled=history.empty)
+st.caption("CSV history is session-only until downloaded. Paper fills require independent price/depth verification; settled results require external confirmation. No real orders.")
 st.divider()
 
 with scan:
