@@ -4,8 +4,8 @@ import pandas as pd
 
 BASE = "https://api.elections.kalshi.com/trade-api/v2"
 # Kalshi sports series may change; add/adjust series after verifying actual event tickers.
-SPORT_PREFIXES = {"CFB": ("KXNCAAF", "KXCFB", "KXNCAAFOOTBALL"), "NFL": ("KXNFL",)}
-COLUMNS = ["league", "ticker", "title", "yes_bid_cents", "yes_ask_cents",
+SPORT_PREFIXES = {"CFB": ("KXNCAAFGAME",), "NFL": ("KXNFLGAME",)}
+COLUMNS = ["league", "market_type", "event", "ticker", "title", "yes_bid_cents", "yes_ask_cents",
            "no_bid_cents", "no_ask_cents", "spread_cents", "volume", "close_time"]
 
 def _get(path, params=None):
@@ -38,33 +38,39 @@ def _single_leg(m):
     return True
 
 def fetch_sports_markets(leagues=("CFB", "NFL"), max_pages=12):
-    """Discover through football-specific series/events before falling back to pagination.
+    """Retrieve open individual game markets through the Kalshi events API.
 
-    Kalshi's general market feed is crowded with combination contracts.
-    Query known league series directly, and show the caller if none are found.
+    Explicit game series prevent season championship futures from polluting results.
+    The API's event pagination is bounded; results may not be exhaustive.
     """
     found = {}
-    # Query market series individually so football is not buried by unrelated markets.
     for league in leagues:
         for series in SPORT_PREFIXES[league]:
             cursor = None
             for _ in range(max_pages):
-                params = {"limit": 1000, "status": "open", "series_ticker": series}
+                params = {"limit": 200, "status": "open",
+                          "series_ticker": series, "with_nested_markets": "true"}
                 if cursor:
                     params["cursor"] = cursor
-                payload = _get("/markets", params)
-                for m in payload.get("markets", []):
-                    ticker = (m.get("ticker") or "").upper()
-                    if not ticker.startswith(series) or not _single_leg(m):
-                        continue
-                    yb, ya = _cents(m, "yes_bid"), _cents(m, "yes_ask")
-                    nb, na = _cents(m, "no_bid"), _cents(m, "no_ask")
-                    found[ticker] = {"league": league, "ticker": ticker,
-                        "title": m.get("title", ""), "yes_bid_cents": yb,
-                        "yes_ask_cents": ya, "no_bid_cents": nb,
-                        "no_ask_cents": na,
-                        "spread_cents": round(ya-yb, 2) if ya is not None and yb is not None else None,
-                        "volume": m.get("volume"), "close_time": m.get("close_time")}
+                payload = _get("/events", params)
+                for event in payload.get("events", []):
+                    event_ticker = event.get("event_ticker", "")
+                    event_title = event.get("title", "")
+                    for m in event.get("markets", []):
+                        ticker = (m.get("ticker") or "").upper()
+                        if m.get("status") not in (None, "open", "active") or not _single_leg(m):
+                            continue
+                        yb, ya = _cents(m, "yes_bid"), _cents(m, "yes_ask")
+                        nb, na = _cents(m, "no_bid"), _cents(m, "no_ask")
+                        # Quote data is indicative; depth and fair probability require separate checks.
+                        found[ticker] = {
+                            "league": league, "market_type": "Game winner",
+                            "event": event_title or event_ticker, "ticker": ticker,
+                            "title": m.get("title", ""), "yes_bid_cents": yb,
+                            "yes_ask_cents": ya, "no_bid_cents": nb,
+                            "no_ask_cents": na,
+                            "spread_cents": round(ya - yb, 2) if ya is not None and yb is not None else None,
+                            "volume": m.get("volume"), "close_time": m.get("close_time")}
                 cursor = payload.get("cursor")
                 if not cursor:
                     break
