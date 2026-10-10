@@ -25,7 +25,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 3.5 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 3.6 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -126,10 +126,6 @@ if "quick_results" in st.session_state:
             group = ranked[(ranked["_event_key"] == row["_event_key"]) & (ranked["_outcome_key"] == row["_outcome_key"])]
             with st.expander("{} — {} to win | {}".format(row["event"], str(row["outcome_team"]).title(), label), expanded=(i == 0)):
                 st.caption("Best preliminary route: {} | Side: {}".format(str(row["outcome_team"]).title(), row["side"]))
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Fair chance", fair)
-                m2.metric("Ask", ask)
-                m3.metric("Net edge", label)
                 # One-share maximum entry price, including the same estimated taker fee
                 # used in the preliminary edge calculation. NOT an executable quote.
                 max_ask = None
@@ -139,9 +135,19 @@ if "quick_results" in st.session_state:
                         if fair_value - candidate_cents - estimated_fee_cents >= 5 - 1e-9:
                             max_ask = candidate_cents
                             break
-                st.write("**Maximum indicative entry for +5pp (one share):** {}".format(
-                    "{}¢".format(max_ask) if max_ask is not None else "None at whole-cent prices"
-                ))
+                # A two-column grid stays compact in narrow iPhone Safari viewports.
+                # Escape dynamic labels before inserting into the read-only HTML card.
+                from html import escape
+                max_entry_label = "{}¢".format(max_ask) if max_ask is not None else "None"
+                tiles = [("Fair chance", fair), ("Ask", ask), ("Net edge", label), ("Max entry for +5pp", max_entry_label)]
+                tile_html = "".join(
+                    '<div style="min-width:0;padding:10px 12px;border:1px solid #7775;border-radius:10px;">'
+                    '<div style="font-size:0.78rem;opacity:.75;margin-bottom:5px;">{}</div>'
+                    '<div style="font-size:clamp(1.15rem,5vw,1.7rem);font-weight:650;line-height:1.2;overflow-wrap:anywhere;">{}</div>'
+                    '</div>'.format(escape(k), escape(str(v))) for k, v in tiles
+                )
+                st.markdown('<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:10px 0 14px;">' + tile_html + '</div>', unsafe_allow_html=True)
+                st.caption("Maximum entry is a calculated one-share threshold, not an available quote.")
                 st.caption("General fee estimate only. Market-specific fees, depth and execution are unverified.")
                 st.write("**Status:** {} — {}".format(row["research_status"], row["reason"]))
                 with st.expander("Contract details and data quality"):
