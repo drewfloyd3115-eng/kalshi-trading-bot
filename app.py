@@ -17,11 +17,12 @@ from liquidity import inspect
 from integrated_scan import scan_candidates
 from paper_journal import journal_rows
 from paper_history import import_history, summary as paper_summary, HISTORY_COLUMNS
+from contract_validation import validate_contract
 from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 2.6 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 2.7 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -135,6 +136,23 @@ if "quick_results" in st.session_state:
     with st.expander("Preliminary matched comparisons"):
         st.dataframe(st.session_state.quick_comparisons, hide_index=True, use_container_width=True)
     st.warning("NO VERIFIED TRADE. Quotes and fees are estimates; injury/news, settlement rules and final synchronization are not validated. No orders placed.")
+st.subheader("Contract validation lab — read-only")
+st.caption("Uses Kalshi public market and order-book data only. Does not spend sportsbook API credits or place orders. Fee metadata and rules are displayed for manual verification, not certified.")
+validation_ticker=st.text_input("Exact Kalshi market ticker",key="validation_ticker")
+validation_side=st.selectbox("Contract side",["YES","NO"],key="validation_side")
+validation_shares=st.number_input("Shares to inspect",min_value=1,max_value=100,value=1,step=1,key="validation_shares")
+if st.button("Inspect contract — no orders",disabled=not validation_ticker.strip()):
+    st.session_state.validation_result=validate_contract(validation_ticker.strip(),validation_side,int(validation_shares))
+if "validation_result" in st.session_state:
+    v=st.session_state.validation_result
+    st.error("NO VERIFIED TRADE — "+str(v.get("reason","")))
+    a,b,c=st.columns(3)
+    a.metric("Best depth ask",str(v.get("best_ask_cents"))+"¢" if v.get("best_ask_cents") is not None else "N/A")
+    b.metric("Shares in depth",v.get("shares_available",0))
+    c.metric("General fee estimate",str(v.get("general_fee_estimate_usd")) if v.get("general_fee_estimate_usd") is not None else "N/A")
+    with st.expander("Market rules, fee metadata and inspection details"):
+        st.json(v)
+st.divider()
 st.subheader("Paper history — import and export")
 st.caption("Import saved paper journal CSVs without making sportsbook API calls. Observations are not paper fills. No settlement or profit is inferred from an observed quote.")
 if "paper_history" not in st.session_state:
