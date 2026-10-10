@@ -25,7 +25,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 3.3 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 3.4 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -109,17 +109,31 @@ if "quick_results" in st.session_state:
         y.metric("+5pp", passing)
         z.metric("Blocked", blocked)
         prices = st.session_state.get("quick_comparisons", pd.DataFrame())
-        for i, row in ranked.head(5).iterrows():
+        # YES on one team and NO on its opponent can represent the same winner.
+        # Group by normalized winning team within the event, not by displayed side.
+        ranked["_outcome_key"] = ranked["outcome_team"].astype(str).str.strip().str.lower()
+        ranked["_event_key"] = ranked["event"].astype(str).str.strip().str.lower()
+        unique_routes = ranked.sort_values("net_edge_pp_1share", ascending=False, na_position="last").drop_duplicates(["_event_key", "_outcome_key"]).head(5)
+        st.caption("Showing up to five distinct winning outcomes; alternate YES/NO routes remain in the full table.")
+        for i, (_, row) in enumerate(unique_routes.iterrows()):
             edge = pd.to_numeric(row["net_edge_pp_1share"], errors="coerce")
             label = "{:+.2f}pp".format(edge) if pd.notna(edge) else "N/A"
             matched_price = prices[(prices["ticker"] == row["ticker"]) & (prices["side"] == row["side"])] if isinstance(prices, pd.DataFrame) and not prices.empty else pd.DataFrame()
-            ask = str(matched_price.iloc[0]["ask_cents"]) + "¢" if not matched_price.empty else "unavailable"
-            with st.expander("{} — {} {} | {}".format(row["event"], row["outcome_team"], row["side"], label), expanded=(i == 0)):
-                st.write("Indicative ask: {} | Kickoff: {}".format(ask, row["kickoff_status"]))
-                st.caption("Books: {} | Quotes: {}".format(row["books"], row["quote_status"]))
-                st.write("**Status:** " + str(row["research_status"]))
-                st.write("**Reason:** " + str(row["reason"]))
-                st.caption("Ticker: " + str(row["ticker"]))
+            ask_value = pd.to_numeric(matched_price.iloc[0]["ask_cents"], errors="coerce") if not matched_price.empty else float("nan")
+            fair_value = pd.to_numeric(matched_price.iloc[0]["fair_pct"], errors="coerce") if not matched_price.empty and "fair_pct" in matched_price.columns else float("nan")
+            ask = "{:.1f}¢".format(ask_value) if pd.notna(ask_value) else "unavailable"
+            fair = "{:.2f}%".format(fair_value) if pd.notna(fair_value) else "unavailable"
+            group = ranked[(ranked["_event_key"] == row["_event_key"]) & (ranked["_outcome_key"] == row["_outcome_key"])]
+            with st.expander("{} — {} | {}".format(row["event"], row["outcome_team"], label), expanded=(i == 0)):
+                st.write("**Best preliminary route:** {} YES/NO contract side {}".format(row["ticker"], row["side"]))
+                st.write("Indicative ask: {} | Sportsbook fair probability: {}".format(ask, fair))
+                st.caption("The edge shown includes the existing one-share fee estimate; fair probability is not a guarantee.")
+                st.write("Kickoff: {} | Books: {} | Quotes: {}".format(row["kickoff_status"], row["books"], row["quote_status"]))
+                st.write("**Status:** {} — {}".format(row["research_status"], row["reason"]))
+                if len(group) > 1:
+                    with st.expander("Other routes to the same outcome"):
+                        st.dataframe(group.drop(columns=["_event_key", "_outcome_key"]), hide_index=True, use_container_width=True)
+        ranked = ranked.drop(columns=["_event_key", "_outcome_key"])
         with st.expander("All matches and CSV export"):
             st.dataframe(ranked, hide_index=True, use_container_width=True)
             st.download_button("Export pregame eligibility CSV", ranked.to_csv(index=False).encode("utf-8"), file_name="kalshi_pregame_eligibility.csv", mime="text/csv")
