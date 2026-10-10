@@ -1,0 +1,72 @@
+"""Phone-friendly paper-only Kalshi scanner and approval queue."""
+import streamlit as st
+import pandas as pd
+from datetime import datetime, timezone
+from config import DEFAULT_BANKROLL
+from risk import evaluate
+from scanner import fetch_markets
+
+st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
+st.title("Kalshi Trade Lab")
+st.caption("Version 0.1 • Research + paper approvals only • LIVE TRADING DISABLED")
+st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
+if "queue" not in st.session_state:
+    st.session_state.queue = []
+if "paper_exposure" not in st.session_state:
+    st.session_state.paper_exposure = 0.0
+
+scan, evaluate_tab, queue_tab = st.tabs(["Market scan", "Evaluate", "Paper queue"])
+with scan:
+    st.write("Public open markets; no Kalshi credentials required.")
+    if st.button("Refresh market snapshot", type="primary"):
+        try:
+            st.session_state.markets = fetch_markets()
+            st.session_state.snapshot_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        except Exception as exc:
+            st.error(f"Market feed unavailable: {exc}")
+    if "markets" in st.session_state:
+        st.caption(f"Retrieved (UTC): {st.session_state.snapshot_at}. Only first 200 open markets; not a comprehensive sports scan.")
+        df = st.session_state.markets
+        query = st.text_input("Filter title or ticker (e.g., NFL, football)")
+        if query:
+            df = df[df["title"].str.contains(query, case=False, na=False) | df["ticker"].str.contains(query, case=False, na=False)]
+        st.dataframe(df, hide_index=True, use_container_width=True)
+
+with evaluate_tab:
+    st.info("Enter an independently estimated probability. The app does not estimate fair probabilities yet. NO price must be the executable NO ask, not 1 minus the YES ask.")
+    ticker = st.text_input("Market ticker")
+    side = st.selectbox("Contract", ["YES", "NO"])
+    fair_pct = st.number_input("Your independent probability (%)", 0.0, 100.0, 50.0, 0.5)
+    ask_cents = st.number_input(f"Executable {side} ask (cents)", 0.1, 99.9, 50.0, 0.1)
+    contracts = st.number_input("Contracts", min_value=1, value=1, step=1)
+    fee = st.number_input("Estimated total fees ($)", min_value=0.0, value=0.0, step=0.01, format="%.2f")
+    bankroll = st.number_input("Paper bankroll ($)", min_value=1.0, value=DEFAULT_BANKROLL, step=50.0)
+    existing = st.number_input("Other open paper exposure ($)", min_value=0.0, value=0.0, step=1.0)
+    if st.button("Evaluate trade"):
+        result = evaluate(side, fair_pct / 100, ask_cents / 100, fee, int(contracts), bankroll, existing + st.session_state.paper_exposure)
+        st.metric("Net edge (percentage points)", f"{result['edge_pp']:+.2f}")
+        st.metric("Estimated cost", f"${result['cost']:.2f}")
+        st.write(result["status"])
+        for reason in result["reasons"]:
+            st.error(reason)
+        if result["status"] == "PAPER CANDIDATE" and ticker.strip():
+            st.session_state.pending = {"ticker": ticker.strip(), "side": side, "contracts": int(contracts), "ask_cents": ask_cents, "cost": result["cost"], "net_edge_pp": result["edge_pp"], "status": "AWAITING PAPER APPROVAL"}
+        else:
+            st.session_state.pop("pending", None)
+    if "pending" in st.session_state:
+        st.write(st.session_state.pending)
+        if st.button("Approve PAPER trade only"):
+            item = dict(st.session_state.pop("pending"))
+            item["status"] = "PAPER APPROVED (NOT EXECUTED)"
+            st.session_state.queue.append(item)
+            st.session_state.paper_exposure += item["cost"]
+            st.success("Added to session-only paper queue. No order was sent.")
+
+with queue_tab:
+    st.write("Session-only approvals. Refreshing or restarting the app may erase them.")
+    st.dataframe(pd.DataFrame(st.session_state.queue), hide_index=True, use_container_width=True)
+    st.metric("Approved paper exposure", f"${st.session_state.paper_exposure:.2f}")
+    if st.button("Clear paper queue"):
+        st.session_state.queue = []
+        st.session_state.paper_exposure = 0.0
+        st.rerun()
