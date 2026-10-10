@@ -75,25 +75,33 @@ def compare(markets, odds, now=None):
             yes_team = [home if label == normalized(home) else away]
             valid = []
             quote_ages = []
+            rejected = {"stale_or_future":0,"kickoff_mismatch":0,"outcome_mismatch":0,"duplicate_book":0,"invalid_odds":0}
             seen_books = set()
             for _, book in group.iterrows():
                 start = parse_time(book.get("start"))
                 updated = parse_time(book.get("updated"))
-                if not start or abs((start-kickoff).total_seconds()) > 60 or start <= now or not updated or updated > now + timedelta(minutes=2) or now - updated > timedelta(minutes=15):
+                if not start or abs((start-kickoff).total_seconds()) > 60:
+                    rejected["kickoff_mismatch"] += 1
+                    continue
+                if start <= now or not updated or updated > now + timedelta(minutes=2) or now - updated > timedelta(minutes=15):
+                    rejected["stale_or_future"] += 1
                     continue
                 try:
                     a, b = normalized(book["team_a"]), normalized(book["team_b"])
                     if {a, b} != {normalized(home), normalized(away)}:
+                        rejected["outcome_mismatch"] += 1
                         continue
                     fy, fn = no_vig(float(book["odds_a"]), float(book["odds_b"]))
                     fair = fy if a == normalized(yes_team[0]) else fn
                     book_id = str(book.get("book_key") or book.get("book") or "").strip().lower()
                     if not book_id or book_id in seen_books:
+                        rejected["duplicate_book"] += 1
                         continue
                     seen_books.add(book_id)
                     valid.append((book_id, fair))
                     quote_ages.append((now-updated).total_seconds()/60)
                 except (ValueError, TypeError, ZeroDivisionError):
+                    rejected["invalid_odds"] += 1
                     continue
             # Two independent books minimum, otherwise avoid fragile comparisons.
             if len({x[0] for x in valid}) < 2:
@@ -114,6 +122,8 @@ def compare(markets, odds, now=None):
                         "ticker": m["ticker"], "side": side, "outcome_team": normalized(yes_team[0] if side == "YES" else (away if yes_team[0] == home else home)), "ask_cents": ask,
                         "fair_pct": round(p*100, 2), "net_edge_pp_1share": round(edge, 2),
                         "books": len({x[0] for x in valid}),
+                        "rejected_quotes": sum(rejected.values()),
+                        "rejection_breakdown": "; ".join(f"{k}={v}" for k,v in rejected.items()),
                         "book_low_pct": round((low_fair if side == "YES" else 1-high_fair)*100,2),
                         "book_high_pct": round((high_fair if side == "YES" else 1-low_fair)*100,2),
                         "book_spread_pp": round((high_fair-low_fair)*100,2),
