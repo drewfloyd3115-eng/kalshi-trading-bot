@@ -6,11 +6,12 @@ from config import DEFAULT_BANKROLL
 from risk import evaluate
 from edge_engine import no_vig, assess, taker_fee
 from outside_odds import fetch_odds
+from matcher import compare
 from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 0.5 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 0.6 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -76,7 +77,25 @@ with odds_tab:
     if "outside_odds" in st.session_state:
         st.caption(f"Retrieved UTC: {st.session_state.odds_at}; free API requests remaining: {st.session_state.odds_remaining or 'unknown'}")
         st.dataframe(st.session_state.outside_odds, hide_index=True, use_container_width=True)
-    st.info("NO VERIFIED EDGE. Automatic matching and injury/line movement checks are not connected yet. Never infer a bet from this table alone.")
+    st.divider()
+    st.subheader("Match sportsbook lines to Kalshi")
+    st.caption("Pregame moneylines only. Requires at least two independent, recently updated sportsbooks and an unambiguous team match.")
+    if st.button("Compare cached market and odds snapshots"):
+        if "markets" not in st.session_state or "outside_odds" not in st.session_state:
+            st.warning("First run Market scan, then fetch Outside odds for the same league.")
+        else:
+            try:
+                matched = compare(st.session_state.markets, st.session_state.outside_odds)
+                st.session_state.matched = matched
+                if matched.empty:
+                    st.warning("NO VERIFIED EDGE: no safe matches. This may reflect missing team-name mappings, started games or stale odds.")
+                else:
+                    st.metric("Preliminary comparisons", len(matched))
+                    st.dataframe(matched, hide_index=True, use_container_width=True)
+                    st.warning("These are preliminary one-share estimates only. Liquidity, precise fees, line movement, injuries and immediate rechecks are NOT validated. DO NOT EXECUTE.")
+            except Exception as exc:
+                st.error(f"Matching failed: {exc}")
+    st.info("NO VERIFIED TRADE. This research comparison cannot issue BUY instructions.")
 
 with edge_tab:
     st.subheader("Independent odds comparison")
