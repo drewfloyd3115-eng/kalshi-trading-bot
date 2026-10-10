@@ -100,7 +100,7 @@ def compare(markets, odds, now=None):
                     fee = taker_fee(ask, 1)
                     edge = 100*(p-ask/100-fee)
                     rows.append({"league": m["league"], "event": m["event"],
-                        "ticker": m["ticker"], "side": side, "ask_cents": ask,
+                        "ticker": m["ticker"], "side": side, "outcome_team": normalized(yes_team[0] if side == "YES" else (away if yes_team[0] == home else home)), "ask_cents": ask,
                         "fair_pct": round(p*100, 2), "net_edge_pp_1share": round(edge, 2),
                         "books": len({x[0] for x in valid}), "status": "UNVERIFIED — DEPTH/RECHECK REQUIRED"})
                 except (TypeError, ValueError, KeyError):
