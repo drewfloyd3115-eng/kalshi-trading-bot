@@ -5,18 +5,19 @@ from datetime import datetime, timezone
 from config import DEFAULT_BANKROLL
 from risk import evaluate
 from edge_engine import no_vig, assess, taker_fee
+from outside_odds import fetch_odds
 from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 0.4 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 0.5 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
 if "paper_exposure" not in st.session_state:
     st.session_state.paper_exposure = 0.0
 
-scan, edge_tab, evaluate_tab, queue_tab = st.tabs(["Market scan", "Edge lab", "Evaluate", "Paper queue"])
+scan, odds_tab, edge_tab, evaluate_tab, queue_tab = st.tabs(["Market scan", "Outside odds", "Edge lab", "Evaluate", "Paper queue"])
 with scan:
     st.write("CFB / NFL single-market discovery. Quotes are read-only and may be stale.")
     leagues = st.multiselect("Leagues", ["CFB", "NFL"], default=["CFB", "NFL"])
@@ -56,6 +57,26 @@ with scan:
             except Exception as exc:
                 st.error(f"Order-book lookup failed: {exc}")
     st.info("NO VERIFIED EDGE: external no-vig odds, injury context and synchronized fair probabilities are not integrated. Do not treat quotes as trade recommendations.")
+
+with odds_tab:
+    st.subheader("Free-tier sportsbook odds")
+    st.caption("The Odds API: independent US sportsbook moneylines. Fetch only when requested to conserve free credits.")
+    key = st.secrets.get("ODDS_API_KEY", "")
+    if not key:
+        st.warning("Outside odds are not connected. Add ODDS_API_KEY in Streamlit app settings → Secrets. Never put the key in GitHub or chat.")
+    odds_league = st.selectbox("League", ["CFB", "NFL"], key="odds_league")
+    if st.button("Fetch outside moneylines", disabled=not bool(key)):
+        try:
+            rows, remaining = fetch_odds(key, odds_league)
+            st.session_state.outside_odds = pd.DataFrame(rows)
+            st.session_state.odds_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            st.session_state.odds_remaining = remaining
+        except Exception as exc:
+            st.error(str(exc))
+    if "outside_odds" in st.session_state:
+        st.caption(f"Retrieved UTC: {st.session_state.odds_at}; free API requests remaining: {st.session_state.odds_remaining or 'unknown'}")
+        st.dataframe(st.session_state.outside_odds, hide_index=True, use_container_width=True)
+    st.info("NO VERIFIED EDGE. Automatic matching and injury/line movement checks are not connected yet. Never infer a bet from this table alone.")
 
 with edge_tab:
     st.subheader("Independent odds comparison")
