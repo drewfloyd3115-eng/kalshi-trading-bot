@@ -10,10 +10,6 @@ def coverage_funnel(odds, diagnostics, comparisons, markets=None):
     matched=set(comparisons["ticker"].astype(str)) if comparisons is not None and not comparisons.empty else set()
     counts={}
     nearest={}
-    market_names={}
-    if markets is not None and not markets.empty:
-        for league, frame in markets.groupby("league"):
-            market_names[league]=sorted(set(str(v) for v in frame["event"].dropna()))
     if odds is not None and not odds.empty and markets is not None and not markets.empty:
         for (league,home,away),group in odds.groupby(["league","home","away"]):
             tickers=set()
@@ -21,7 +17,12 @@ def coverage_funnel(odds, diagnostics, comparisons, markets=None):
                 parts=re.split(r"\s+(?:vs\.?|versus|at|@)\s+",str(market.get("event","")),flags=re.I)
                 if len(parts)==2 and {normalized(x) for x in parts}=={normalized(home),normalized(away)}:
                     tickers.add(str(market.get("ticker")))
-            nearest[(league,str(away)+" @ "+str(home))]="; ".join(sorted(set(str(m.get("event")) for _,m in markets[markets["league"]==league].iterrows() if normalized(home) in [normalized(p) for p in re.split(r"\s+(?:vs\\.?|versus|at|@)\s+",str(m.get("event","")),flags=re.I)] or normalized(away) in [normalized(p) for p in re.split(r"\s+(?:vs\\.?|versus|at|@)\s+",str(m.get("event","")),flags=re.I)]))[:3])
+            partial=[]
+            for _,m in markets[markets["league"]==league].iterrows():
+                parts=re.split(r"\\s+(?:vs\\.?|versus|at|@)\\s+",str(m.get("event","")),flags=re.I)
+                if len(parts)==2 and ({normalized(home),normalized(away)} & {normalized(p) for p in parts}):
+                    partial.append(str(m.get("event")))
+            nearest[(league,str(away)+" @ "+str(home))]="; ".join(sorted(set(partial))[:3])
             counts[(league,str(away)+" @ "+str(home))]=sum(
                 int((comparisons["ticker"]==ticker).sum()) for ticker in tickers & matched)
     result["matched_contract_sides"]=[
