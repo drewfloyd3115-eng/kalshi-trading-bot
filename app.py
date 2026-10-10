@@ -7,11 +7,12 @@ from risk import evaluate
 from edge_engine import no_vig, assess, taker_fee
 from outside_odds import fetch_odds
 from matcher import compare
+from liquidity import inspect
 from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 0.6 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 0.7 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -95,6 +96,19 @@ with odds_tab:
                     st.warning("These are preliminary one-share estimates only. Liquidity, precise fees, line movement, injuries and immediate rechecks are NOT validated. DO NOT EXECUTE.")
             except Exception as exc:
                 st.error(f"Matching failed: {exc}")
+    st.divider()
+    st.subheader("Recheck executable liquidity")
+    st.caption("Choose an exact matched ticker and side. This fetches a fresh public order book; it does not place an order.")
+    depth_check_ticker = st.text_input("Ticker to recheck", key="depth_check_ticker")
+    depth_check_side = st.selectbox("Side to buy", ["YES", "NO"], key="depth_check_side")
+    depth_check_shares = st.number_input("Shares to inspect", min_value=1, max_value=1000, value=5, key="depth_check_shares")
+    if st.button("Recheck depth and estimated cost"):
+        try:
+            result = inspect(depth_check_ticker.strip(), depth_check_side, int(depth_check_shares))
+            st.json(result)
+            st.warning("NO VERIFIED TRADE: this order-book snapshot is not an execution instruction. Independent odds, injuries, timing, exact fees and edge must be rechecked.")
+        except Exception as exc:
+            st.error(f"Liquidity recheck failed: {exc}")
     st.info("NO VERIFIED TRADE. This research comparison cannot issue BUY instructions.")
 
 with edge_tab:
