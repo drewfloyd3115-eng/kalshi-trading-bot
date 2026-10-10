@@ -19,7 +19,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 2.0 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 2.1 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -52,7 +52,7 @@ if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
                 "time": datetime.now(timezone.utc).isoformat(timespec="seconds")
             }
             st.session_state.quick_diagnostics = diagnostics(quick_markets, quick_odds)
-            st.session_state.quick_funnel = coverage_funnel(quick_odds, st.session_state.quick_diagnostics, quick_matches)
+            st.session_state.quick_funnel = coverage_funnel(quick_odds, st.session_state.quick_diagnostics, quick_matches, quick_markets)
             st.session_state.quick_event_audit = audit(quick_markets, quick_odds)
             st.session_state.quick_comparisons = quick_matches
             st.session_state.quick_routes = equivalent_routes(quick_matches)
