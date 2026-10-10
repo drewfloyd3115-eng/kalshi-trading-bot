@@ -30,6 +30,7 @@ def audit(markets, odds):
             hit_home=contains_team(outcome_text,home_key)
             hit_away=contains_team(outcome_text,away_key)
             unique=hit_home!=hit_away
+            # Do not treat substring matches as verified opponents.
             records.append({"game":str(away)+" @ "+str(home),
                 "kickoff_utc":kickoff.isoformat(),"kalshi_event":event,
                 "ticker":m.get("ticker"),"market_title":title,
