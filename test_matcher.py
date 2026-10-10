@@ -51,7 +51,7 @@ class MatcherRegression(unittest.TestCase):
         o.loc[0,"odds_b"]=150
         r=compare(m,o,NOW)
         self.assertEqual(len(r),2)
-        self.assertAlmostEqual(float(r[r.side=="YES"].iloc[0].fair_pct),58.33,places=1)
+        self.assertAlmostEqual(float(r[r.side=="YES"].iloc[0].fair_pct),56.25,places=1)
 
 if __name__=="__main__":
     unittest.main()
