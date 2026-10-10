@@ -4,18 +4,19 @@ import pandas as pd
 from datetime import datetime, timezone
 from config import DEFAULT_BANKROLL
 from risk import evaluate
+from edge_engine import no_vig, assess, taker_fee
 from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 0.2 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 0.4 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
 if "paper_exposure" not in st.session_state:
     st.session_state.paper_exposure = 0.0
 
-scan, evaluate_tab, queue_tab = st.tabs(["Market scan", "Evaluate", "Paper queue"])
+scan, edge_tab, evaluate_tab, queue_tab = st.tabs(["Market scan", "Edge lab", "Evaluate", "Paper queue"])
 with scan:
     st.write("CFB / NFL single-market discovery. Quotes are read-only and may be stale.")
     leagues = st.multiselect("Leagues", ["CFB", "NFL"], default=["CFB", "NFL"])
@@ -55,6 +56,32 @@ with scan:
             except Exception as exc:
                 st.error(f"Order-book lookup failed: {exc}")
     st.info("NO VERIFIED EDGE: external no-vig odds, injury context and synchronized fair probabilities are not integrated. Do not treat quotes as trade recommendations.")
+
+with edge_tab:
+    st.subheader("Independent odds comparison")
+    st.caption("Manual verified odds entry; no automatic sportsbook feed yet. Enter both sides of the SAME binary event.")
+    market = st.text_input("Exact Kalshi ticker", key="edge_ticker")
+    yes_odds = st.number_input("Sportsbook YES American odds", value=-110, step=5)
+    no_odds = st.number_input("Sportsbook NO American odds", value=-110, step=5)
+    yes_ask = st.number_input("Kalshi YES ask (cents)", 0.0, 100.0, 50.0, step=1.0)
+    no_ask = st.number_input("Kalshi NO ask (cents)", 0.0, 100.0, 50.0, step=1.0)
+    yes_depth = st.number_input("Verified YES ask depth (shares)", min_value=0, value=0, step=1)
+    no_depth = st.number_input("Verified NO ask depth (shares)", min_value=0, value=0, step=1)
+    edge_bankroll = st.number_input("Paper bankroll ($)", min_value=1.0, value=DEFAULT_BANKROLL, key="edge_bankroll")
+    edge_exposure = st.number_input("Other open exposure ($)", min_value=0.0, value=0.0, key="edge_exposure")
+    fee_multiplier = st.number_input("Verified fee multiplier (1 = standard formula)", min_value=0.0, value=1.0, step=0.1)
+    st.warning("Confirm the market rules, current sportsbook lines, fee schedule and executable ask depth yourself. This is a research calculator, not a verified live signal.")
+    if st.button("Calculate fee-adjusted edges"):
+        try:
+            fy, fn = no_vig(yes_odds, no_odds)
+            st.write(f"No-vig fair probability: YES {fy:.1%} / NO {fn:.1%}")
+            results = assess(yes_odds, no_odds, yes_ask, no_ask, edge_bankroll,
+                             edge_exposure + st.session_state.paper_exposure,
+                             fee_multiplier, yes_depth, no_depth)
+            st.dataframe(pd.DataFrame(results), hide_index=True, use_container_width=True)
+            st.info("PAPER CANDIDATE is conditional, not BUY. Recheck all inputs immediately before acting.")
+        except Exception as exc:
+            st.error(f"Cannot evaluate: {exc}")
 
 with evaluate_tab:
     st.info("Enter an independently estimated probability. The app does not estimate fair probabilities yet. NO price must be the executable NO ask, not 1 minus the YES ask.")
