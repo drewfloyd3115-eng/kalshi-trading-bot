@@ -8,6 +8,7 @@ from matcher import compare
 from diagnostics import diagnostics
 from coverage_funnel import coverage_funnel
 from paper_journal import journal_rows
+from paper_history import import_history, summary as paper_summary
 from unittest.mock import patch
 from integrated_scan import scan_candidates
 
@@ -61,6 +62,30 @@ class MatcherRegression(unittest.TestCase):
             result=scan_candidates(matches,500,0,max_checks=1)
         self.assertEqual(len(result),1)
         self.assertLessEqual(float(result.iloc[0]["estimated_cost"]),5.0)
+    def test_history_observations_are_not_fills(self):
+        m,o=fixtures()
+        journal=journal_rows(compare(m,o,NOW),"CFB")
+        history=import_history(journal.to_csv(index=False).encode("utf-8"))
+        stats=paper_summary(history)
+        self.assertEqual(stats["observations"],2)
+        self.assertEqual(stats["paper_fills"],0)
+        self.assertEqual(stats["closed"],0)
+        self.assertEqual(stats["gross_pnl"],0.0)
+    def test_history_rejects_observed_settlement(self):
+        m,o=fixtures()
+        journal=journal_rows(compare(m,o,NOW),"CFB")
+        journal["settlement_result"]="WIN"
+        with self.assertRaises(ValueError):
+            import_history(journal.to_csv(index=False).encode("utf-8"))
+    def test_history_closed_gross_pnl(self):
+        m,o=fixtures()
+        journal=journal_rows(compare(m,o,NOW),"CFB").head(1)
+        journal["paper_status"]="PAPER_CLOSED"
+        journal["paper_shares"]=2
+        journal["paper_fill_price_cents"]=40
+        journal["settlement_result"]="WIN"
+        stats=paper_summary(import_history(journal.to_csv(index=False).encode("utf-8")))
+        self.assertAlmostEqual(stats["gross_pnl"],1.2)
     def test_no_vig_even(self):
         a,b=no_vig(-110,-110)
         self.assertAlmostEqual(a,0.5)
