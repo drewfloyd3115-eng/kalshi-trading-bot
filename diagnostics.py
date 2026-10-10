@@ -1,7 +1,8 @@
 """Read-only diagnostics for why sportsbook games do not reach comparison."""
 import pandas as pd
 from datetime import datetime, timezone, timedelta
-from matcher import clean, team_key, parse_time
+from matcher import clean, parse_time
+from team_names import normalized, contains_team
 
 def diagnostics(markets, odds):
     if markets is None or odds is None or markets.empty or odds.empty:
@@ -16,11 +17,11 @@ def diagnostics(markets, odds):
             if updated and now-timedelta(minutes=15) <= updated <= now+timedelta(minutes=2):
                 fresh += 1
         candidates = markets[markets["league"] == league]
-        a, b = team_key(home), team_key(away)
+        a, b = normalized(home), normalized(away)
         found = []
         for _, m in candidates.iterrows():
             event = clean(m.get("event", ""))
-            if a and b and a in event and b in event:
+            if a and b and contains_team(event, a) and contains_team(event, b):
                 found.append(m)
         if not start or start <= now:
             reason = "Game already started or missing kickoff"
