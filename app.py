@@ -6,7 +6,8 @@ from config import DEFAULT_BANKROLL
 from risk import evaluate
 from edge_engine import no_vig, assess, taker_fee
 from outside_odds import fetch_odds
-from matcher import compare
+from matcher import compare, parse_time
+from team_names import normalized
 from diagnostics import diagnostics
 from coverage_funnel import coverage_funnel
 from event_audit import audit
@@ -22,7 +23,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 2.8 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 2.9 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -58,6 +59,8 @@ if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
             st.session_state.quick_funnel = coverage_funnel(quick_odds, st.session_state.quick_diagnostics, quick_matches, quick_markets)
             st.session_state.quick_event_audit = audit(quick_markets, quick_odds)
             st.session_state.quick_comparisons = quick_matches
+            st.session_state.quick_odds_cache = quick_odds
+            st.session_state.quick_markets_cache = quick_markets
             st.session_state.paper_scan_journal = journal_rows(quick_matches, quick_league, st.session_state.quick_results["time"])
             st.session_state.quick_routes = equivalent_routes(quick_matches)
             st.session_state.quick_fee_analysis = fee_analysis(quick_matches)
@@ -67,6 +70,8 @@ if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
                 quick_exposure + st.session_state.paper_exposure)
         except Exception as exc:
             st.session_state.pop("quick_results", None)
+            st.session_state.pop("quick_odds_cache", None)
+            st.session_state.pop("quick_markets_cache", None)
             st.session_state.pop("quick_comparisons", None)
             st.session_state.pop("paper_scan_journal", None)
             st.session_state.pop("quick_routes", None)
@@ -138,30 +143,76 @@ if "quick_results" in st.session_state:
     st.warning("NO VERIFIED TRADE. Quotes and fees are estimates; injury/news, settlement rules and final synchronization are not validated. No orders placed.")
 st.subheader("Contract validation lab — read-only")
 st.caption("Uses Kalshi public market and order-book data only. Does not spend sportsbook API credits or place orders. Fee metadata and rules are displayed for manual verification, not certified.")
-ticker_options=[]
-if "quick_comparisons" in st.session_state and not st.session_state.quick_comparisons.empty:
-    ticker_options += st.session_state.quick_comparisons["ticker"].dropna().astype(str).tolist()
-if "markets" in st.session_state and not st.session_state.markets.empty:
-    ticker_options += st.session_state.markets["ticker"].dropna().astype(str).tolist()
-ticker_options=sorted(set(ticker_options))
+# Use cached discovery data only; never fetch sportsbook odds during inspection.
+cached_frames=[st.session_state.get("markets"),st.session_state.get("quick_markets_cache")]
+market_rows={}
+for frame in cached_frames:
+    if isinstance(frame,pd.DataFrame) and not frame.empty and "ticker" in frame.columns:
+        for _,row in frame.iterrows():
+            market_rows[str(row["ticker"])]=row
+ticker_options=sorted(market_rows)
+def contract_label(ticker):
+    row=market_rows.get(ticker)
+    if row is None:
+        return ticker
+    event=str(row.get("event") or row.get("title") or "Unknown game")
+    outcome=str(row.get("yes_sub_title") or "Unknown YES outcome")
+    return f"{event} — {outcome} YES ({ticker})"
 if ticker_options:
-    validation_selected=st.selectbox("Choose a scanned contract (no API request)",["Enter ticker manually"]+ticker_options,key="validation_selected")
+    validation_selected=st.selectbox("Choose a scanned contract (no API request)",["Enter ticker manually"]+ticker_options,
+        format_func=lambda x:"Enter ticker manually" if x=="Enter ticker manually" else contract_label(x),key="validation_selected")
 else:
     validation_selected="Enter ticker manually"
 validation_ticker=(st.text_input("Exact Kalshi market ticker",key="validation_ticker") if validation_selected=="Enter ticker manually" else validation_selected)
-st.caption("A listed contract is not necessarily pregame. Market status ACTIVE does not establish kickoff time.")
 validation_side=st.selectbox("Contract side",["YES","NO"],key="validation_side")
 validation_shares=st.number_input("Shares to inspect",min_value=1,max_value=100,value=1,step=1,key="validation_shares")
+# Kickoff is accepted only from a recent, exact matched sportsbook event in this session.
+kickoff_utc=None
+kickoff_note="No independently matched, fresh sportsbook kickoff cached for this contract."
+matches=st.session_state.get("quick_comparisons")
+odds_cache=st.session_state.get("quick_odds_cache")
+scan_metadata=st.session_state.get("quick_results",{})
+scan_time=parse_time(scan_metadata.get("time")) if isinstance(scan_metadata,dict) else None
+now=datetime.now(timezone.utc)
+if (isinstance(matches,pd.DataFrame) and not matches.empty
+    and isinstance(odds_cache,pd.DataFrame) and not odds_cache.empty
+    and scan_time is not None and -120 <= (now-scan_time).total_seconds() <= 300
+    and validation_ticker in set(matches["ticker"].astype(str))):
+    candidate=matches[matches["ticker"].astype(str)==validation_ticker].iloc[0]
+    market=market_rows.get(validation_ticker)
+    if market is not None:
+        import re
+        parts=re.split(r"\\s+(?:vs\\.?|versus|at|@)\\s+",str(market.get("event","")),flags=re.I)
+        if len(parts)==2:
+            team_pair={normalized(x) for x in parts}
+            possible=odds_cache[odds_cache.apply(
+                lambda x: {normalized(x.get("home")),normalized(x.get("away"))}==team_pair,axis=1)]
+            times={str(x) for x in possible["start"].dropna() if parse_time(x)}
+            if len(times)==1 and len(possible["book_key"].dropna().unique())>=2:
+                start=parse_time(next(iter(times)))
+                if start and start>now:
+                    kickoff_utc=start.isoformat()
+                    kickoff_note="Pregame kickoff from recent, exact matched sportsbook event (cached). Not a live game-status check."
+                elif start:
+                    kickoff_note="Cached sportsbook kickoff has passed; pregame approval blocked."
+st.caption(kickoff_note)
 if st.button("Inspect contract — no orders",disabled=not validation_ticker.strip()):
-    st.session_state.validation_result=validate_contract(validation_ticker.strip(),validation_side,int(validation_shares))
+    st.session_state.validation_result=validate_contract(validation_ticker.strip(),validation_side,int(validation_shares),kickoff_utc=kickoff_utc)
 if "validation_result" in st.session_state:
     v=st.session_state.validation_result
     st.error("NO VERIFIED TRADE — "+str(v.get("reason","")))
-    a,b,c=st.columns(3)
+    st.markdown("**Contract inspection summary**")
+    st.write(contract_label(str(v.get("ticker",""))))
+    st.caption("Side: "+str(v.get("side",""))+" | Kickoff: "+str(v.get("kickoff_utc") or "Unverified")+" | Timing: "+str(v.get("pregame_timing","UNKNOWN")))
+    a,b=st.columns(2)
     a.metric("Best depth ask",str(v.get("best_ask_cents"))+"¢" if v.get("best_ask_cents") is not None else "N/A")
-    b.metric("Shares in depth",v.get("shares_available",0))
-    c.metric("General fee estimate",str(v.get("general_fee_estimate_usd")) if v.get("general_fee_estimate_usd") is not None else "N/A")
-    st.caption("Pregame timing: "+str(v.get("pregame_timing","UNKNOWN"))+" | Fee status: "+str(v.get("fee_status","UNVERIFIED")))
+    b.metric("Available shares",v.get("shares_available",0))
+    gross=v.get("gross_cost_usd")
+    fee=v.get("general_fee_estimate_usd")
+    a,b=st.columns(2)
+    a.metric("Gross depth cost",f"${gross:.2f}" if isinstance(gross,(float,int)) else "N/A")
+    b.metric("Estimated total incl. fee",f"${gross+fee:.2f}" if isinstance(gross,(float,int)) and isinstance(fee,(float,int)) else "N/A")
+    st.caption("Fee status: "+str(v.get("fee_status","UNVERIFIED"))+"; depth is indicative, not executable.")
     with st.expander("Market rules, fee metadata and inspection details"):
         st.json(v)
 st.divider()
