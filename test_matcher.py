@@ -4,6 +4,8 @@ from datetime import datetime,timezone,timedelta
 import pandas as pd
 from edge_engine import no_vig,taker_fee
 from matcher import compare
+from diagnostics import diagnostics
+from coverage_funnel import coverage_funnel
 
 NOW=datetime(2026,10,10,16,0,tzinfo=timezone.utc)
 def fixtures():
@@ -18,6 +20,21 @@ def fixtures():
     return market,odds
 
 class MatcherRegression(unittest.TestCase):
+    def test_uab_memphis_coverage(self):
+        m,o=fixtures()
+        m["event"]="UAB vs Memphis"
+        m["yes_sub_title"]="UAB"
+        m["ticker"]="KXNCAAFGAME-26OCT10UABMEM-UAB"
+        o["home"]="Memphis"
+        o["away"]="UAB"
+        o["team_a"]="UAB"
+        o["team_b"]="Memphis"
+        matches=compare(m,o,NOW)
+        self.assertEqual(len(matches),2)
+        diag=diagnostics(m,o,now=NOW)
+        funnel=coverage_funnel(o,diag,matches,m)
+        self.assertEqual(funnel.iloc[0]["status"],"MATCHED")
+        self.assertEqual(int(funnel.iloc[0]["matched_contract_sides"]),2)
     def test_no_vig_even(self):
         a,b=no_vig(-110,-110)
         self.assertAlmostEqual(a,0.5)
