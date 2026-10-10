@@ -9,13 +9,14 @@ from outside_odds import fetch_odds
 from matcher import compare
 from diagnostics import diagnostics
 from event_audit import audit
+from equivalent_routes import equivalent_routes
 from liquidity import inspect
 from integrated_scan import scan_candidates
 from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 1.3.1 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 1.4 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -50,12 +51,14 @@ if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
             st.session_state.quick_diagnostics = diagnostics(quick_markets, quick_odds)
             st.session_state.quick_event_audit = audit(quick_markets, quick_odds)
             st.session_state.quick_comparisons = quick_matches
+            st.session_state.quick_routes = equivalent_routes(quick_matches)
             st.session_state.quick_depth = scan_candidates(
                 quick_matches, quick_bankroll,
                 quick_exposure + st.session_state.paper_exposure)
         except Exception as exc:
             st.session_state.pop("quick_results", None)
             st.session_state.pop("quick_comparisons", None)
+            st.session_state.pop("quick_routes", None)
             st.session_state.pop("quick_diagnostics", None)
             st.session_state.pop("quick_event_audit", None)
             st.session_state.pop("quick_depth", None)
@@ -76,6 +79,9 @@ if "quick_results" in st.session_state:
     if not st.session_state.quick_comparisons.empty:
         st.subheader("Best preliminary edges")
         st.dataframe(st.session_state.quick_comparisons.head(10), hide_index=True, use_container_width=True)
+    with st.expander("Equivalent outcome routes — indicative prices only"):
+        st.caption("Groups YES and NO contracts paying on the same team. Depth, settlement terms and fees are NOT verified.")
+        st.dataframe(st.session_state.get("quick_routes", pd.DataFrame()), hide_index=True, use_container_width=True)
     st.caption("Coverage diagnostics use expanded aliases. Trade matching now requires exact opponents, event date and YES outcome label; uncertain games are excluded.")
     with st.expander("Coverage diagnostics — why games were excluded"):
         st.dataframe(st.session_state.get("quick_diagnostics", pd.DataFrame()), hide_index=True, use_container_width=True)
