@@ -5,7 +5,7 @@ import pandas as pd
 BASE = "https://api.elections.kalshi.com/trade-api/v2"
 # Kalshi sports series may change; add/adjust series after verifying actual event tickers.
 SPORT_PREFIXES = {"CFB": ("KXNCAAFGAME",), "NFL": ("KXNFLGAME",)}
-COLUMNS = ["league", "market_type", "event", "ticker", "title", "yes_bid_cents", "yes_ask_cents",
+COLUMNS = ["league", "market_type", "event", "ticker", "title", "yes_sub_title", "yes_bid_cents", "yes_ask_cents",
            "no_bid_cents", "no_ask_cents", "spread_cents", "volume", "close_time"]
 
 def _get(path, params=None):
@@ -66,7 +66,7 @@ def fetch_sports_markets(leagues=("CFB", "NFL"), max_pages=12):
                         found[ticker] = {
                             "league": league, "market_type": "Game winner",
                             "event": event_title or event_ticker, "ticker": ticker,
-                            "title": m.get("title", ""), "yes_bid_cents": yb,
+                            "title": m.get("title", ""), "yes_sub_title": m.get("yes_sub_title", ""), "yes_bid_cents": yb,
                             "yes_ask_cents": ya, "no_bid_cents": nb,
                             "no_ask_cents": na,
                             "spread_cents": round(ya - yb, 2) if ya is not None and yb is not None else None,
