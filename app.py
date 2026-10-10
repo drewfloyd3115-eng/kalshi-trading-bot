@@ -20,11 +20,12 @@ from paper_journal import journal_rows
 from paper_history import import_history, summary as paper_summary, HISTORY_COLUMNS
 from contract_validation import validate_contract
 from inspection_diagnostics import explain
+from pregame_dashboard import eligibility_dashboard
 from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 3.0 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 3.1 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -60,6 +61,7 @@ if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
             st.session_state.quick_funnel = coverage_funnel(quick_odds, st.session_state.quick_diagnostics, quick_matches, quick_markets)
             st.session_state.quick_event_audit = audit(quick_markets, quick_odds)
             st.session_state.quick_comparisons = quick_matches
+            st.session_state.quick_eligibility = eligibility_dashboard(quick_matches, quick_odds, st.session_state.quick_results["time"])
             st.session_state.quick_odds_cache = quick_odds
             st.session_state.quick_markets_cache = quick_markets
             st.session_state.paper_scan_journal = journal_rows(quick_matches, quick_league, st.session_state.quick_results["time"])
@@ -74,6 +76,7 @@ if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
             st.session_state.pop("quick_odds_cache", None)
             st.session_state.pop("quick_markets_cache", None)
             st.session_state.pop("quick_comparisons", None)
+            st.session_state.pop("quick_eligibility", None)
             st.session_state.pop("paper_scan_journal", None)
             st.session_state.pop("quick_routes", None)
             st.session_state.pop("quick_fee_analysis", None)
@@ -90,6 +93,15 @@ if "quick_results" in st.session_state:
     a.metric("Kalshi markets", summary["markets"])
     b.metric("Sportsbook rows", summary["sportsbook_rows"])
     c.metric("Matched sides", summary["matched"])
+    st.subheader("Pregame eligibility — research only")
+    st.caption("Exact matched sides, cached independent kickoff, quote freshness, sportsbook disagreement and +5pp filter. No live-status, fee, settlement or execution approval.")
+    eligibility=eligibility_dashboard(st.session_state.get("quick_comparisons"), st.session_state.get("quick_odds_cache"), summary.get("time"))
+    st.session_state.quick_eligibility=eligibility
+    if eligibility.empty:
+        st.info("No exact matched sides to assess. No verified trade.")
+    else:
+        st.dataframe(eligibility, hide_index=True, use_container_width=True)
+        st.download_button("Export pregame eligibility CSV", eligibility.to_csv(index=False).encode("utf-8"), file_name="kalshi_pregame_eligibility.csv", mime="text/csv")
     st.subheader("Paper scan decision")
     st.caption("Risk caps: 1% per position and 3% total open exposure; $5 and $15 respectively at a $500 bankroll.")
     st.caption("Fees and settlement rules are not independently verified per contract. No real-money recommendations.")
