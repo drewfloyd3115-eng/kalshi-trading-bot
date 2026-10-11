@@ -33,6 +33,15 @@ class PregameDashboardTests(unittest.TestCase):
         result=eligibility_dashboard(self.matches,self.odds,self.now.isoformat(),self.now)
         self.assertEqual(result.iloc[0]["research_status"],"BLOCKED")
 
+    def test_moderate_book_disagreement_blocks(self):
+        self.matches["book_spread_pp"] = 3.5
+        result = eligibility_dashboard(self.matches, self.odds, self.now.isoformat(), self.now)
+        self.assertEqual(result.iloc[0]["research_status"], "BLOCKED")
+
+    def test_missing_kickoff_blocks(self):
+        result = eligibility_dashboard(self.matches, pd.DataFrame(), self.now.isoformat(), self.now)
+        self.assertEqual(result.iloc[0]["research_status"], "BLOCKED")
+
     def test_below_threshold_blocks(self):
         self.matches["net_edge_pp_1share"]=4.99
         result=eligibility_dashboard(self.matches,self.odds,self.now.isoformat(),self.now)
