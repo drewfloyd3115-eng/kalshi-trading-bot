@@ -26,15 +26,14 @@ from contract_validation import validate_contract
 from inspection_diagnostics import explain
 from pregame_dashboard import eligibility_dashboard
 from scanner import fetch_sports_markets, fetch_orderbook
-from sports_ui import (PAGES, add_styles, header, home_overview, opportunities_page,
+from sports_ui import (PAGES, add_styles, header, navigation, home_overview, opportunities_page,
                        detail_page, portfolio_page)
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 add_styles()
 header()
-st.caption("Sports UI preview 1.1 · Paper research only · Live trading disabled.")
-page = st.radio("Navigate", PAGES, key="sports_nav", horizontal=True,
-                label_visibility="collapsed")
+st.caption("Sports UI preview 1.2 · Paper research only · Live trading disabled.")
+page = navigation()
 if "queue" not in st.session_state:
     st.session_state.queue = []
 if "paper_exposure" not in st.session_state:
