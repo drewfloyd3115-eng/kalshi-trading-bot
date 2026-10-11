@@ -115,6 +115,8 @@ def estimate_exit(position, market, orderbook, requested_shares=None, observed_a
         "market_status": "UNKNOWN", "fee_schedule_verified": False,
         "source_quote_age_verified": False,
         "execution_verified": False, "hold_value_verified": False,
+        # A calculated snapshot is NOT evidence of an actual public request.
+        "lookup_status": "SOURCE UNVERIFIED",
     }
     if not isinstance(market, dict) or market.get("ticker") != ticker:
         result["reason"] = "Kalshi market metadata does not match exact held ticker"
@@ -184,8 +186,8 @@ def estimate_exit(position, market, orderbook, requested_shares=None, observed_a
 
 def review_public_position(position, requested_shares=None, *,
                            market_fetch=None, book_fetch=None, observed_at=None):
-    """Two Kalshi PUBLIC GET requests at most, only when explicitly invoked."""
-    result = None
+    """Two public Kalshi GETs at most; return truthful request provenance."""
+    lookup_started = False
     try:
         pid, ticker, side, held, basis = _contract(position)
         requested = _positive_int(
@@ -193,8 +195,7 @@ def review_public_position(position, requested_shares=None, *,
             "requested shares", maximum=MAX_REVIEW_SHARES)
         if requested > held:
             raise ValueError("Requested quantity exceeds manually held shares")
-        # Reject obvious example/fake tickers before using the public API.
-        # Only exact game-winner series currently supported by our scanner.
+        # Reject synthetic and unsupported tickers without a public request.
         from scanner import SPORT_PREFIXES
         league = str(position.get("league", "")).strip()
         prefixes = SPORT_PREFIXES.get(league, ())
@@ -204,14 +205,17 @@ def review_public_position(position, requested_shares=None, *,
             market_fetch = lambda t: _get("/markets/" + quote(t, safe="")).get("market", {})
         if book_fetch is None:
             book_fetch = fetch_orderbook
+        lookup_started = True
         market = market_fetch(ticker)
-        # Fail closed and SAVE an explanatory snapshot without an extra book call
-        # when metadata is missing or already closed.
         if not isinstance(market, dict) or market.get("ticker") != ticker \
                 or market.get("status") not in ("open", "active"):
-            return estimate_exit(position, market, None, requested, observed_at)
+            result = estimate_exit(position, market, None, requested, observed_at)
+            result["lookup_status"] = "MARKET METADATA ONLY — NO ORDERBOOK"
+            return result
         book = book_fetch(ticker)
-        return estimate_exit(position, market, book, requested, observed_at)
+        result = estimate_exit(position, market, book, requested, observed_at)
+        result["lookup_status"] = "PUBLIC ORDERBOOK RETURNED"
+        return result
     except Exception as exc:
         try:
             pid, ticker, side, held, _ = _contract(position)
@@ -222,7 +226,10 @@ def review_public_position(position, requested_shares=None, *,
             "held_shares_at_scan": held, "requested_shares": requested_shares,
             "checked_utc": _utc(observed_at).isoformat(timespec="seconds"),
             "status": "UNVERIFIED — NO EXIT SIGNAL",
-            "reason": "Public exit-depth lookup failed: " + str(exc)[:140],
+            "reason": (("Public exit-depth lookup failed: " if lookup_started
+                        else "Rejected before public lookup: ") + str(exc)[:140]),
+            "lookup_status": ("PUBLIC LOOKUP FAILED" if lookup_started
+                              else "REJECTED BEFORE LOOKUP"),
             "best_bid_cents": None, "covered_shares": 0, "depth_complete": False,
             "execution_verified": False, "source_quote_age_verified": False,
             "fee_schedule_verified": False, "hold_value_verified": False,
@@ -241,6 +248,13 @@ def snapshot_integrity(snapshot, position, *, now=None, requested_shares=None):
             return False, "Position or remaining shares changed; refresh exit review"
         if requested_shares is not None and snapshot.get("requested_shares") != requested_shares:
             return False, "Requested sale quantity changed; refresh exit review"
+        lookup = snapshot.get("lookup_status", "SOURCE UNVERIFIED")
+        if lookup == "REJECTED BEFORE LOOKUP":
+            return False, "No Kalshi public lookup performed — request rejected locally"
+        if lookup == "PUBLIC LOOKUP FAILED":
+            return False, "Kalshi public lookup failed — no current order-book evidence"
+        if lookup == "MARKET METADATA ONLY — NO ORDERBOOK":
+            return False, "Market metadata checked, but no sell-side order book retrieved"
         checked = _utc(snapshot.get("checked_utc"))
         at = _utc(now)
         elapsed = (at - checked).total_seconds()
