@@ -11,7 +11,7 @@ import io
 import re
 import uuid
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_UP
 
 import pandas as pd
 
@@ -227,7 +227,7 @@ def ledger_summary(ledger):
         "closed_positions": len(positions) - len(open_states),
         "partial_exits": sum(p["exit_count"] for p in positions.values()),
         "remaining_shares": sum(p["remaining_shares"] for p in open_states),
-        "open_cost_usd": float(exposure.quantize(CENT, rounding=ROUND_HALF_UP)),
+        "open_cost_usd": float(exposure.quantize(CENT, rounding=ROUND_UP)),
         "realized_net_usd": float(profit.quantize(CENT, rounding=ROUND_HALF_UP)),
         "has_exits": any(p["exit_count"] > 0 for p in positions.values()),
     }
@@ -341,7 +341,8 @@ def import_ledger(raw):
         rows = list(reader)
         if len(rows) > MAX_TRANSACTIONS:
             raise ValueError("Too many position transactions")
-        if any(None in row for row in rows):
+        if any(None in row or any(value is None for value in row.values())
+               for row in rows):
             raise ValueError("Malformed CSV rows")
         frame = pd.DataFrame(rows, columns=COLUMNS)
         return validate_ledger(frame)
