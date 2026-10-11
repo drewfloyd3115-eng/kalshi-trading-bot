@@ -16,7 +16,9 @@ PAGES = ["Home", "Opportunities", "Market Detail", "Portfolio", "Research"]
 CARD_COLUMNS = ["league", "event", "outcome_team", "ticker", "side", "fair_pct",
                 "ask_cents", "net_edge_pp_1share", "books", "book_spread_pp",
                 "oldest_quote_minutes", "quote_quality", "depth_status",
-                "research_status", "reason"]
+                "research_status", "reason", "kickoff_utc", "kickoff_status",
+                "quote_status", "max_entry_cents_1share", "price_drop_needed_cents",
+                "depth_best_ask_cents", "depth_edge_pp"]
 
 
 def opportunity_view(matches, odds=None, scan_time=None, depth=None, now=None):
@@ -40,7 +42,8 @@ def opportunity_view(matches, odds=None, scan_time=None, depth=None, now=None):
     else:
         prices["league"] = "Unverified"
     if not safety.empty:
-        selected = safety[keys + ["research_status", "reason"]].drop_duplicates(keys)
+        selected = safety[keys + ["research_status", "reason", "kickoff_utc",
+                                  "kickoff_status", "quote_status"]].drop_duplicates(keys)
         prices = prices.merge(selected, on=keys, how="left", validate="many_to_one")
     else:
         prices["research_status"] = "BLOCKED"
@@ -184,6 +187,37 @@ div.stButton > button[kind="primary"]:hover {background:#086bd2; color:white;}
 .kl-opp-flag.review {border-color:#b3832f;background:#37290d;color:#ffd58d;}
 .kl-opp-flag.blocked {border-color:#805361;background:#321d29;color:#ffb3bd;}
 .kl-opp-flag.preview {border-color:#386f99;background:#0d3049;color:#9ddaff;}
+
+/* Cached market detail; two-column cards remain side by side on iPhone. */
+.kl-detail-hero {background:linear-gradient(125deg,#0d3455,#071b2d);
+ border:1px solid #2e5b80;border-radius:15px;padding:14px;margin:10px 0;}
+.kl-detail-eyebrow {font-size:.70rem;letter-spacing:.13em;color:#8bcfff;font-weight:800;}
+.kl-detail-name {font-size:1.28rem;font-weight:850;color:#fff;margin:5px 0;}
+.kl-detail-outcome {font-size:.83rem;color:#afd0ec;margin:5px 0 10px;}
+.kl-detail-pill {display:inline-block;border:1px solid #9b6670;background:#3d212e;
+ border-radius:8px;padding:5px 9px;color:#ffbecb;font-weight:800;font-size:.73rem;}
+.kl-detail-pill.preview {border-color:#397ab2;background:#123751;color:#9bd9ff;}
+.kl-detail-pill.review {border-color:#ae8739;background:#3c2d13;color:#ffe0a2;}
+.kl-detail-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0;}
+.kl-detail-stat {background:#082033;border:1px solid #295171;border-radius:12px;padding:12px;min-width:0;}
+.kl-detail-stat small {color:#abc9e3;font-size:.70rem;display:block;}
+.kl-detail-stat strong {color:#fff;font-weight:850;font-size:1.35rem;display:block;margin:6px 0;}
+.kl-detail-stat em {color:#94b7d2;font-size:.66rem;font-style:normal;display:block;}
+.kl-detail-panel {background:#081f33;border:1px solid #2c516f;border-radius:13px;
+ padding:14px;margin:12px 0;}
+.kl-detail-panel b {color:#eff9ff;}
+.kl-detail-bar-title {display:flex;justify-content:space-between;color:#bed8eb;font-size:.77rem;margin:9px 0 5px;}
+.kl-detail-track {background:#102d46;border-radius:12px;height:10px;overflow:hidden;}
+.kl-detail-fill {height:100%;background:linear-gradient(90deg,#1272de,#66bcff);border-radius:12px;}
+.kl-detail-fill.ask {background:linear-gradient(90deg,#887542,#ffcd70);}
+.kl-detail-checks {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:11px 0;}
+.kl-detail-check {border:1px solid #2b4964;border-radius:9px;padding:9px;background:#071a2b;min-width:0;}
+.kl-detail-check small {display:block;font-size:.69rem;color:#96b8d3;}
+.kl-detail-check strong {font-size:.78rem;color:#eaf7ff;overflow-wrap:anywhere;}
+.kl-detail-note {font-size:.76rem;line-height:1.52;color:#bdd6eb;margin-top:10px;}
+@media(max-width:650px){.kl-detail-stat{padding:10px}.kl-detail-stat strong{font-size:1.16rem}
+.kl-detail-hero{padding:12px}.kl-detail-name{font-size:1.10rem}}
+
 .kl-opp-figures {
     display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
     gap:7px; margin:3px 0 10px;
