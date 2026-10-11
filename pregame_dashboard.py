@@ -19,7 +19,8 @@ def eligibility_dashboard(matches, odds, scan_time=None, now=None):
         ticker = str(match.get("ticker", ""))
         event = str(match.get("event", ""))
         side = str(match.get("side", ""))
-        books = int(match.get("books", 0) or 0)
+        books_raw = pd.to_numeric(match.get("books", 0), errors="coerce")
+        books = int(books_raw) if pd.notna(books_raw) and 0 <= books_raw <= 100 else 0
         spread = pd.to_numeric(match.get("book_spread_pp"), errors="coerce")
         edge = pd.to_numeric(match.get("net_edge_pp_1share"), errors="coerce")
         kickoff = None
@@ -36,12 +37,12 @@ def eligibility_dashboard(matches, odds, scan_time=None, now=None):
                 if len(times) == 1 and len(same) >= 2:
                     kickoff = parse_time(next(iter(times)))
         kickoff_ok = bool(kickoff and kickoff > now)
-        quote_ok = fresh_scan and books >= 2
+        quote_ok = fresh_scan and books >= 2 and pd.notna(spread) and spread <= 3
         edge_ok = pd.notna(edge) and edge >= 5
         reasons = []
         if not kickoff_ok: reasons.append("Independent future kickoff unavailable")
-        if not quote_ok: reasons.append("Fresh two-book scan unavailable")
-        if pd.isna(spread) or spread > 5: reasons.append("Book disagreement/quality unverified")
+        if not quote_ok: reasons.append("Fresh two-book consensus unavailable")
+        if pd.isna(spread) or spread > 3: reasons.append("Book disagreement/quality unverified")
         if not edge_ok: reasons.append("Below +5pp or no edge")
         rows.append({
             "event": event, "ticker": ticker, "side": side,
