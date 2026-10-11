@@ -28,12 +28,13 @@ def discovery_report(markets, odds, funnel, comparisons):
     if "pregame_timing" not in data.columns:
         data["pregame_timing"] = "UNKNOWN"
     data["pregame_timing"] = data["pregame_timing"].fillna("UNKNOWN")
+    data["partial_event_candidates"] = data.get("partial_event_candidates", pd.Series("", index=data.index)).fillna("").astype(str)
     data["next_check"] = data.apply(lambda r:
         "Game already started; pregame evaluation prohibited" if r["pregame_timing"] == "PASSED"
         else ("Independent kickoff missing; exclude until verified" if r["pregame_timing"] == "UNKNOWN"
         else ("Matched; check estimated edge and independent verification" if r["coverage_stage"] == "MATCHED"
         else ("Inspect outcome labels, ticker date, pricing and quote validity" if r["coverage_stage"] == "CANDIDATE — UNMATCHED"
-        else "Check market availability and exact team aliases; do not force-match"))), axis=1)
+        else ("Check exact matchup and date in nearby Kalshi events; aliases are diagnostic only" if r["partial_event_candidates"] else "No related Kalshi event in scanned pages; check market availability or scan coverage")))), axis=1)
     priority = {"CANDIDATE — UNMATCHED": 0, "NO EXACT EVENT": 1, "MATCHED": 2}
     data["_priority"] = data["coverage_stage"].map(priority)
     data = data.sort_values(["_priority", "fresh_rows"], ascending=[True, False]).drop(columns="_priority")
