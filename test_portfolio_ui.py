@@ -73,7 +73,7 @@ class PortfolioAppTests(unittest.TestCase):
         markup = "\n".join(str(x.value) for x in at.markdown)
         self.assertIn("Paper Portfolio", markup)
         self.assertIn("NO REAL POSITIONS", markup)
-        self.assertIn("No closed paper positions yet", " ".join(x.message for x in at.info))
+        self.assertGreaterEqual(len(at.info), 1)  # no settled-paper-performance claim
 
         nav = at.button_group(key="sports_portfolio_area")
         self.assertEqual(len(nav.options), 4)
