@@ -124,7 +124,9 @@ def header():
 
 
 def go_to_detail(ticker, side):
-    st.session_state["sports_selected_route"] = str(ticker) + "|" + str(side)
+    route = str(ticker) + "|" + str(side)
+    st.session_state["sports_selected_route"] = route
+    st.session_state["sports_detail_route"] = route
     st.session_state["sports_nav"] = "Market Detail"
 
 
@@ -166,6 +168,7 @@ def home_overview(bankroll, extra_exposure):
             st.caption(research_label(row))
             st.button("View market details", key=f"home_detail_{i}", use_container_width=True,
                       on_click=go_to_detail, args=(row["ticker"], row["side"]))
+    st.warning("NO VERIFIED TRADE. These are ranked estimates, not buy signals or verified executable quotes.")
     st.caption("Displayed odds, edges, and eligibility are snapshots. No observations are approved trades.")
 
 
@@ -217,7 +220,9 @@ def detail_page():
     selected = st.session_state.get("sports_selected_route")
     if selected not in keys:
         selected = keys[0]
-    route = st.selectbox("Winning outcome / route", keys, index=keys.index(selected),
+    if st.session_state.get("sports_detail_route") not in keys:
+        st.session_state["sports_detail_route"] = selected
+    route = st.selectbox("Winning outcome / route", keys, key="sports_detail_route",
                          format_func=lambda x: str(routes[x]["event"]) + " — " +
                              str(routes[x]["outcome_team"]).title() + " (" + str(routes[x]["side"]) + ")")
     row = routes[route]
