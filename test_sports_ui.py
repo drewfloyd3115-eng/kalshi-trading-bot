@@ -51,6 +51,20 @@ class SportsUITests(unittest.TestCase):
         self.assertFalse(allowed)
         self.assertIn("unknown", label.lower())
 
+    def test_preview_never_looks_like_an_approved_or_blocked_market(self):
+        sample = {
+            "event": "Upcoming matchup placeholder",
+            "outcome_team": "No outcome loaded", "research_status": "DESIGN PREVIEW",
+            "net_edge_pp_1share": None, "ask_cents": None, "fair_pct": None,
+            "books": None, "depth_status": "NOT INSPECTED",
+            "reason": "DESIGN PREVIEW ONLY — no odds, no verified trade",
+        }
+        self.assertEqual(research_label(sample), "DESIGN PREVIEW — no market data")
+        html = opportunity_card_html(sample)
+        self.assertIn("kl-opp-flag preview", html)
+        self.assertNotIn("BLOCKED — no trade", html)
+        self.assertNotIn("PRELIMINARY +5pp", html)
+
     def test_empty_opportunities(self):
         self.assertTrue(opportunity_view(pd.DataFrame()).empty)
 
