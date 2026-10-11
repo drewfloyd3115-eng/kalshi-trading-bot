@@ -32,7 +32,7 @@ from sports_ui import (PAGES, add_styles, header, home_overview, opportunities_p
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 add_styles()
 header()
-st.caption("Sports UI preview 1 · Research and hypothetical paper positions only · Quotes may be delayed.")
+st.caption("Sports UI preview 1.1 · Paper research only · Live trading disabled.")
 page = st.radio("Navigate", PAGES, key="sports_nav", horizontal=True,
                 label_visibility="collapsed")
 if "queue" not in st.session_state:
@@ -42,11 +42,13 @@ if "paper_exposure" not in st.session_state:
 
 if page == "Home":
     st.subheader("One-tap CFB / NFL paper scan")
-    st.caption("Fetches Kalshi and sportsbook moneylines, matches pregame contracts, and checks promising depth. One sportsbook API request per league selected; manual tap only.")
+    st.caption("Manual sportsbook comparison · One Odds API request per scan · Paper research only.")
     quick_league = st.selectbox("Scan league", ["CFB", "NFL"], key="quick_league")
-    quick_bankroll = st.number_input("Paper bankroll for one-tap scan ($)", min_value=1.0, value=DEFAULT_BANKROLL, key="quick_bankroll")
-    quick_exposure = st.number_input("Other open exposure ($)", min_value=0.0, value=0.0, key="quick_exposure")
-    if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
+    with st.expander("Paper bankroll & exposure settings", expanded=False):
+        quick_bankroll = st.number_input("Paper bankroll for one-tap scan ($)", min_value=1.0, value=DEFAULT_BANKROLL, key="quick_bankroll")
+        quick_exposure = st.number_input("Other open exposure ($)", min_value=0.0, value=0.0, key="quick_exposure")
+        st.caption("Position limit: 1% of bankroll; total exposure limit: 3%. Settings do not make any API requests.")
+    if st.button("Scan Now — paper only", type="primary", key="quick_scan", use_container_width=True):
         api_key = st.secrets.get("ODDS_API_KEY", "")
         if not api_key:
             st.error("Add ODDS_API_KEY to Streamlit Secrets.")
