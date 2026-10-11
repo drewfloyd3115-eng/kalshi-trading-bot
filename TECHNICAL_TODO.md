@@ -8,7 +8,8 @@ Personal-use CFB/NFL research and **paper-trading** roadmap. This is a technical
 - [ ] **Validate research calculations:** contract identity, live kickoff eligibility, source freshness, consensus disagreement, executable order-book prices, contract-specific fees, and position/exposure limits.
 - [x] **Phase 1 — Manual hypothetical position ledger:** explicit paper entry/exit transactions, proportionally allocated entry fees, partial exits, independent exposure accounting, and strict CSV backup/restore. These are *manual assumptions*, not verified prices or fills.
 - [ ] **Verify full end-to-end paper lifecycle:** distinguish observed quotes from real executed fills; verify market-specific fees, settlement rules, probability calibration and actual net P&L. Manual ledger and Phase 2 quote research are not sufficient.
-- [x] **Phase 2 offline regression suite:** 100 tests passing at commit fd59868 on 2026-10-11. Public Kalshi live market integration and iPhone quote-panel UX not yet independently tested.
+- [x] **Phase 2 offline regression suite:** 114 tests passing on 2026-10-11, including conservative whole-share rounding for public fixed-point depth.
+- [x] **One real-market public Kalshi integration probe:** GitHub Actions run 38178707468 on 2026-10-11 fetched an active CFB contract (`KXNCAAFGAME-26OCT16CHSOCLEM-CLEM`) and its live YES bid order book, safely valued one hypothetical share using 99¢ resting bid and rounded sub-share order-book quantities downward. **No trade/execution, source quote age, exchange fees, or net-profit signal verified.** Other contract types and the phone UI with genuine ticker remain to be tested. No sportsbook, Firecrawl, or paper ledger changes.
 - [ ] **Active-position monitoring and exit / profit-taking decision support** (Phase 2 manual public-depth research completed; executable verification and actual hold/sell decisions remain open; details below).
 - [ ] Continue sports-focused mobile UI refinement, including the Portfolio display, without changing trading/risk rules.
 
@@ -38,6 +39,7 @@ Personal-use CFB/NFL research and **paper-trading** roadmap. This is a technical
 - [ ] Live/in-play scenarios block hold-value calculations when an independently updated probability estimate is unavailable.
 - [x] Manual paper exit transactions survive CSV export/import with stable transaction IDs; duplicate transactions and over-selling are rejected.
 - [x] Phone UI exposes **Portfolio / Exit review / Review selected position**, independently of the main Scan Now workflow (automated app rendering tests; iPhone visual check pending).
-- [ ] All offline regression tests pass; manually verify one end-to-end paper position and exit before relying on the feature.
+- [x] All offline regression tests pass; manual entry, partial exit, CSV backup/restore and iPhone Exit Review layout tested using a fictional position. Real-market public bid response tested separately in one read-only GitHub run.
+- [ ] Independently validate quote age, executable sell bids, source-specific fees and NO-side real-market depth before producing any hold/sell recommendation.
 
 **Release gate:** Design and implement this as a **paper-only** capability first. Real trading, automated trading, and background notifications require separate security, data and risk review.
