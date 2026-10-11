@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sys
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from urllib.parse import quote
 
 from exit_liquidity import estimate_exit, snapshot_integrity
@@ -102,8 +103,18 @@ def run_probe(*, market_source=fetch_sports_markets,
             result = estimate_exit(position, metadata, book,
                                    requested_shares=1, observed_at=checked)
             held_bids = book.get("yes_bids" if candidate["side"] == "YES" else "no_bids", [])
-            # Actual public bid quantities can be fractional or use a different
-            # response schema. Only show a bounded public diagnostic sample.
+            fractional_held_levels = 0
+            for level in held_bids:
+                try:
+                    count = Decimal(str(level[1]))
+                    if count.is_finite() and count != count.to_integral_value():
+                        fractional_held_levels += 1
+                except (InvalidOperation, TypeError, ValueError, IndexError):
+                    continue
+            # Kalshi FP book quantities can include sub-share orders.
+            # The exit calculator now conservatively floors WHOLE shares
+            # at each price level; it never rounds fractional depth upward.
+            # Only show a bounded public diagnostic sample.
             # INVALID is a failing integration state, never 'empty but verified'.
             invalid_depth = "Invalid" in result["reason"] or "Malformed" in result["reason"]
             status = ("READ_ONLY_BOOK_INVALID — NO EXIT SIGNAL" if invalid_depth
@@ -113,6 +124,7 @@ def run_probe(*, market_source=fetch_sports_markets,
             report.update({
                 "status": status,
                 "public_held_bid_sample": held_bids[:5],
+                "fractional_held_bid_levels": fractional_held_levels,
                 "ticker": ticker, "league": candidate["league"],
                 "side": candidate["side"],
                 "market_status": result["market_status"],
