@@ -50,6 +50,19 @@ def _review_card(snapshot, integrity_ok, integrity_reason):
     pnl = _usd(snapshot.get("hypothetical_net_pnl_usd"))
     reason = escape(str(snapshot.get("reason") or "Verification unavailable"))
     validity = escape(str(integrity_reason))
+    provenance = str(snapshot.get("lookup_status") or "SOURCE UNVERIFIED")
+    if provenance == "REJECTED BEFORE LOOKUP":
+        freshness = "NO PUBLIC LOOKUP"
+    elif provenance == "PUBLIC LOOKUP FAILED":
+        freshness = "LOOKUP FAILED"
+    elif provenance == "MARKET METADATA ONLY — NO ORDERBOOK":
+        freshness = "NO ORDERBOOK"
+    elif provenance == "PUBLIC ORDERBOOK RETURNED" and integrity_ok:
+        freshness = "RECENT RETRIEVAL"
+    elif integrity_ok and provenance == "SOURCE UNVERIFIED":
+        freshness = "SOURCE UNVERIFIED"
+    else:
+        freshness = "NOT CURRENT"
     return f"""
 <div class="kl-port-panel">
   <div class="kl-port-title">Public order-book exit research</div>
@@ -72,9 +85,10 @@ def _review_card(snapshot, integrity_ok, integrity_reason):
     <div class="kl-port-stat"><small>Hypothetical net P&amp;L</small><strong>{pnl}</strong>
       <span>NOT actual realized profit or an exit recommendation</span></div>
     <div class="kl-port-stat"><small>Source freshness</small>
-      <strong>{"RECENT LOOKUP" if integrity_ok else "NOT CURRENT"}</strong>
+      <strong>{freshness}</strong>
       <span>Source bid age and execution remain unverified</span></div>
   </div>
+  <div class="kl-port-muted"><b>Lookup result:</b> {escape(provenance)}</div>
   <div class="kl-port-muted"><b>Depth / market:</b> {reason}</div>
   <div class="kl-port-muted" style="margin-top:7px"><b>Snapshot integrity:</b> {validity}</div>
   <div class="kl-port-muted" style="margin-top:9px">The source does not verify
