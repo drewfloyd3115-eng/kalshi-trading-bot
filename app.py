@@ -13,6 +13,7 @@ from coverage_funnel import coverage_funnel
 from discovery_report import discovery_report
 from price_discovery import price_discovery
 from scan_monitor import scan_changes
+from snapshot_backup import export_snapshot, import_snapshot
 from event_audit import audit
 from equivalent_routes import equivalent_routes
 from route_depth import review_routes
@@ -28,7 +29,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 4.2.1 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 4.3 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -40,6 +41,25 @@ st.caption("Fetches Kalshi and sportsbook moneylines, matches pregame contracts,
 quick_league = st.selectbox("Scan league", ["CFB", "NFL"], key="quick_league")
 quick_bankroll = st.number_input("Paper bankroll for one-tap scan ($)", min_value=1.0, value=DEFAULT_BANKROLL, key="quick_bankroll")
 quick_exposure = st.number_input("Other open exposure ($)", min_value=0.0, value=0.0, key="quick_exposure")
+with st.expander("Scan history backup — no API credits", expanded=False):
+    st.caption("Save each successful scan as a CSV. If this browser session resets, import the earlier snapshot to compare it with the next completed scan. Import never approves trades.")
+    saved = st.session_state.get("completed_scan_snapshots", {}).get(quick_league)
+    if saved:
+        st.download_button("Download latest scan snapshot CSV",
+            export_snapshot(saved["matches"], quick_league, saved["time"]),
+            file_name=f"kalshi_{quick_league.lower()}_snapshot.csv", mime="text/csv")
+    else:
+        st.info("No completed scan stored for this league in this session.")
+    uploaded = st.file_uploader("Import previous snapshot CSV", type=["csv"], key="snapshot_import")
+    if uploaded is not None and st.button("Use imported snapshot as previous scan", key="use_snapshot"):
+        try:
+            current_time = st.session_state.get("quick_results", {}).get("time") if st.session_state.get("quick_results", {}).get("league") == quick_league else None
+            restored = import_snapshot(uploaded.getvalue(), quick_league, current_time)
+            st.session_state.setdefault("manual_previous_snapshots", {})[quick_league] = restored
+            st.success("Previous snapshot restored for research comparison only. No sportsbook request used.")
+        except (ValueError, pd.errors.ParserError, UnicodeError) as exc:
+            st.error(f"Snapshot rejected: {exc}")
+
 if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
     api_key = st.secrets.get("ODDS_API_KEY", "")
     if not api_key:
@@ -78,6 +98,8 @@ if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
             # Commit history only after the complete scan succeeds, separately per league.
             snapshots = st.session_state.setdefault("completed_scan_snapshots", {})
             old = snapshots.get(quick_league)
+            if not old:
+                old = st.session_state.get("manual_previous_snapshots", {}).get(quick_league)
             st.session_state.previous_comparisons = old["matches"].copy() if old else pd.DataFrame()
             st.session_state.previous_scan_time = old["time"] if old else None
             snapshots[quick_league] = {"time": scan_finished_at, "matches": quick_matches.copy()}
@@ -146,7 +168,13 @@ if "quick_results" in st.session_state:
             st.download_button("Download price discovery CSV",
                 price_table.to_csv(index=False).encode("utf-8"),
                 file_name="kalshi_price_discovery.csv", mime="text/csv")
-    st.subheader("Manual opportunity monitor 4.1 — scan integrity")
+    # Imported backups can restore comparison even after a session reset.
+    restored = st.session_state.get("manual_previous_snapshots", {}).get(summary.get("league"))
+    if restored and parse_time(restored["time"]) and parse_time(summary.get("time")) and parse_time(restored["time"]) < parse_time(summary.get("time")):
+        if not st.session_state.get("previous_scan_time"):
+            st.session_state.previous_comparisons = restored["matches"].copy()
+            st.session_state.previous_scan_time = restored["time"]
+    st.subheader("Manual opportunity monitor 4.3 — scan integrity and backup")
     st.caption("Compares the latest two successful scans in this browser session. No background checks or extra API calls. Scan Now consumes the usual sportsbook request.")
     changes = scan_changes(st.session_state.get("previous_comparisons"), st.session_state.get("quick_comparisons"), eligibility_dashboard(st.session_state.get("quick_comparisons"), st.session_state.get("quick_odds_cache"), summary.get("time")), st.session_state.get("previous_scan_time"), summary.get("time"))
     if changes.empty:
