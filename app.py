@@ -28,14 +28,13 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 4.2 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 4.2.1 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
 if "paper_exposure" not in st.session_state:
     st.session_state.paper_exposure = 0.0
 
-scan, odds_tab, edge_tab, evaluate_tab, queue_tab = st.tabs(["Market scan", "Outside odds", "Edge lab", "Evaluate", "Paper queue"])
 st.subheader("One-tap CFB / NFL paper scan")
 st.caption("Fetches Kalshi and sportsbook moneylines, matches pregame contracts, and checks promising depth. One sportsbook API request per league selected; manual tap only.")
 quick_league = st.selectbox("Scan league", ["CFB", "NFL"], key="quick_league")
@@ -280,6 +279,8 @@ if "quick_results" in st.session_state:
     with st.expander("Preliminary matched comparisons"):
         st.dataframe(st.session_state.quick_comparisons, hide_index=True, use_container_width=True)
     st.warning("NO VERIFIED TRADE. Quotes and fees are estimates; injury/news, settlement rules and final synchronization are not validated. No orders placed.")
+scan, odds_tab, edge_tab, evaluate_tab, queue_tab = st.tabs(["Market scan", "Outside odds", "Edge lab", "Evaluate", "Paper queue"])
+
 st.subheader("Contract validation lab — read-only")
 st.caption("Uses Kalshi public market and order-book data only. Does not spend sportsbook API credits or place orders. Fee metadata and rules are displayed for manual verification, not certified.")
 # Use cached discovery data only; never fetch sportsbook odds during inspection.
