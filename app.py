@@ -26,7 +26,6 @@ from contract_validation import validate_contract
 from inspection_diagnostics import explain
 from pregame_dashboard import eligibility_dashboard
 from scanner import fetch_sports_markets, fetch_orderbook
-import sports_ui
 from sports_ui import (PAGES, add_styles, header, home_overview, opportunities_page,
                        detail_page, portfolio_page)
 
@@ -41,15 +40,33 @@ def sportsbook_api_key():
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 add_styles()
 header()
-st.caption("Sports UI preview 1.2.1 · Paper research only · Live trading disabled.")
-# Streamlit Cloud may briefly reuse a cached older sports_ui module during redeploy.
-# Never crash the entire research app because a purely visual navigation export is
-# missing: fall back to a fully visible vertical selector until the module reloads.
-if callable(getattr(sports_ui, "navigation", None)):
-    page = sports_ui.navigation()
-else:
-    st.warning("Refreshing the interface after an update; research tools remain available.")
-    page = st.selectbox("Screen", PAGES, key="sports_nav")
+st.caption("Sports UI preview 1.3 · Paper research only · Live trading disabled.")
+
+# Keep essential mobile navigation in the entrypoint itself. This prevents a
+# stale secondary module during Streamlit Cloud hot deployment from hiding pages.
+def _set_navigation(destination):
+    st.session_state["sports_nav"] = destination
+
+
+def _render_navigation():
+    if st.session_state.get("sports_nav") not in PAGES:
+        st.session_state["sports_nav"] = "Home"
+    nav_rows = (
+        (("Home", "nav_home"), ("Opportunities", "nav_opportunities"),
+         ("Market Detail", "nav_market_detail")),
+        (("Portfolio", "nav_portfolio"), ("Research", "nav_research")),
+    )
+    for items in nav_rows:
+        columns = st.columns(len(items), gap="small")
+        for col, (destination, key) in zip(columns, items):
+            with col:
+                st.button(destination, key=key, use_container_width=True,
+                          type=("primary" if st.session_state["sports_nav"] == destination else "secondary"),
+                          on_click=_set_navigation, args=(destination,))
+    return st.session_state["sports_nav"]
+
+
+page = _render_navigation()
 if "queue" not in st.session_state:
     st.session_state.queue = []
 if "paper_exposure" not in st.session_state:
