@@ -11,6 +11,7 @@ from team_names import normalized
 from diagnostics import diagnostics
 from coverage_funnel import coverage_funnel
 from discovery_report import discovery_report
+from price_discovery import price_discovery
 from event_audit import audit
 from equivalent_routes import equivalent_routes
 from route_depth import review_routes
@@ -26,7 +27,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 3.7 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 3.8 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -114,6 +115,23 @@ if "quick_results" in st.session_state:
             st.download_button("Download coverage audit CSV",
                 coverage_table.to_csv(index=False).encode("utf-8"),
                 file_name="kalshi_coverage_audit.csv", mime="text/csv")
+    st.subheader("Price discovery 3.8 — all matched sides")
+    st.caption("Cached quotes only. One-share fee estimate; max entry is theoretical, not an available order-book price. No extra sportsbook requests.")
+    price_table = price_discovery(st.session_state.get("quick_comparisons"))
+    if price_table.empty:
+        st.info("No eligible exact matched sides to price.")
+    else:
+        closest = price_table.iloc[0]
+        pc1, pc2, pc3 = st.columns(3)
+        pc1.metric("Compared sides", len(price_table))
+        pc2.metric("Closest net edge", f"{closest['net_edge_pp_1share']:+.2f}pp")
+        pc3.metric("Gap to +5pp", f"{closest['gap_to_threshold_pp']:.2f}pp")
+        with st.expander("All prices ranked — threshold distance, book disagreement, CSV", expanded=True):
+            st.caption("A smaller gap is not approval. Wide sportsbook disagreement and old quotes weaken confidence; verify contract fees, depth, kickoff and settlement separately.")
+            st.dataframe(price_table, hide_index=True, use_container_width=True)
+            st.download_button("Download price discovery CSV",
+                price_table.to_csv(index=False).encode("utf-8"),
+                file_name="kalshi_price_discovery.csv", mime="text/csv")
     st.subheader("Opportunity dashboard — research only")
     st.caption("Top five preliminary matches. Cached data only; no extra sportsbook requests.")
     eligibility = eligibility_dashboard(st.session_state.get("quick_comparisons"), st.session_state.get("quick_odds_cache"), summary.get("time"))
