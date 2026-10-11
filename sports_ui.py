@@ -89,21 +89,21 @@ div.stButton > button[kind="primary"]:hover {background:#086bd2; color:white;}
 }
 [data-testid="stDataFrame"] {border:1px solid #1b3b58; border-radius:12px;}
 /* All five navigation destinations remain visible on narrow iPhones. */
-.st-key-sports_navigation div[role="radiogroup"] {
+.st-key-sports_nav div[role="radiogroup"] {
     display: grid !important; grid-template-columns: repeat(5, minmax(0,1fr));
     overflow: visible !important; gap: 7px;
 }
-.st-key-sports_navigation div[role="radiogroup"] label {
+.st-key-sports_nav div[role="radiogroup"] label {
     min-width:0; min-height:44px; justify-content:center; text-align:center;
     white-space:normal; border-radius:11px; border:1px solid #234665;
     background:#0a2034; padding:8px 6px; font-size:0.84rem;
 }
 @media (max-width: 650px) {
     .block-container {padding-top:0.85rem; padding-left:1rem; padding-right:1rem;}
-    .st-key-sports_navigation div[role="radiogroup"] {
+    .st-key-sports_nav div[role="radiogroup"] {
         grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px;
     }
-    .st-key-sports_navigation div[role="radiogroup"] label {
+    .st-key-sports_nav div[role="radiogroup"] label {
         font-size:.76rem; padding:7px 5px; line-height:1.2;
     }
     .kl-hero {padding:12px 14px; margin-bottom:7px; border-radius:14px;}
