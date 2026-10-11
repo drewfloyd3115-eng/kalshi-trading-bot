@@ -88,27 +88,41 @@ div.stButton > button[kind="primary"]:hover {background:#086bd2; color:white;}
     border-color: #1b3b58; border-radius: 12px;
 }
 [data-testid="stDataFrame"] {border:1px solid #1b3b58; border-radius:12px;}
-/* Streamlit button grid instead of a clipped horizontal radio menu. */
-[class*="st-key-nav_"] button {
-    width:100%; min-width:0; min-height:42px;
-    border:1px solid #254763; border-radius:11px;
-    font-weight:650; white-space:normal; overflow-wrap:break-word;
-    padding:0.40rem 0.35rem;
+/* Streamlit normally stacks st.columns vertically on narrow phones.
+   Override only the navigation container, never the data or scanner UI. */
+.st-key-sports_navigation_grid [data-testid="stHorizontalBlock"] {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    width: 100% !important;
 }
-@media (max-width:650px) {
-    .block-container {padding-top:0.85rem; padding-left:1rem; padding-right:1rem;}
-    [class*="st-key-nav_"] button {font-size:.78rem; line-height:1.15; padding:.36rem .18rem;}
-    .kl-hero {padding:12px 14px; margin-bottom:7px; border-radius:14px;}
-    .kl-title {font-size:1.65rem; margin:5px 0;}
-    .kl-subtitle {font-size:.82rem; line-height:1.32;}
-    .kl-eyebrow {font-size:.62rem;}
-    .kl-pill {padding:4px 8px; font-size:.68rem;}
+.st-key-sports_navigation_grid [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    flex: 1 1 0% !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: none !important;
 }
-.kl-hero {padding:12px 14px; margin-bottom:7px; border-radius:14px;}
-    .kl-title {font-size:1.65rem; margin:5px 0;}
-    .kl-subtitle {font-size:.82rem; line-height:1.32;}
-    .kl-eyebrow {font-size:.62rem;}
-    .kl-pill {padding:4px 8px; font-size:.68rem;}
+.st-key-sports_navigation_grid [data-testid="stButton"] {
+    width: 100% !important;
+}
+.st-key-sports_navigation_grid button {
+    width: 100%; min-width: 0; min-height: 43px;
+    border: 1px solid #254763; border-radius: 11px;
+    font-weight: 650; white-space: normal; overflow-wrap: anywhere;
+    line-height: 1.15; font-size: .84rem; padding: .35rem .2rem;
+}
+@media (max-width: 650px) {
+    .block-container {padding-top: .85rem; padding-left: 1rem; padding-right: 1rem;}
+    .st-key-sports_navigation_grid button {
+        font-size: .73rem; min-height: 45px; padding: .32rem .1rem;
+    }
+    .kl-hero {padding: 12px 14px; margin-bottom: 7px; border-radius: 14px;}
+    .kl-title {font-size: 1.65rem; margin: 5px 0;}
+    .kl-subtitle {font-size: .82rem; line-height: 1.32;}
+    .kl-eyebrow {font-size: .62rem;}
+    .kl-pill {padding: 4px 8px; font-size: .68rem;}
 }
 .kl-hero {
     background: radial-gradient(ellipse at 85% -12%,#1963a7 0%,transparent 48%),
