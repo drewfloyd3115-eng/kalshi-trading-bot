@@ -176,7 +176,7 @@ def _manual_entry_form(bankroll, other_exposure):
                 "I confirm this is a manually simulated fill, not a real trade or verified price.",
                 key="ledger_entry_confirm")
             save = st.form_submit_button("Save hypothetical entry", type="primary",
-                                         use_container_width=True)
+                                         key="ledger_entry_save", use_container_width=True)
         if save:
             if not confirmed:
                 st.error("Confirm that this is only a simulated manual fill.")
@@ -236,7 +236,8 @@ def _manual_exit_form(ledger):
             "I confirm the exit price is hypothetical and does not represent a verified bid.",
             key="ledger_exit_confirm")
         submit = st.form_submit_button("Record hypothetical partial/full exit",
-                                       type="primary", use_container_width=True)
+                                       type="primary", key="ledger_exit_save",
+                                       use_container_width=True)
     if submit:
         if not confirmed:
             st.error("Confirm that this is only a hypothetical manual exit.")
