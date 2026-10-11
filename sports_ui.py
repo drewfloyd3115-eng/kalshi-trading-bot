@@ -27,6 +27,8 @@ def opportunity_view(matches, odds=None, scan_time=None, depth=None, now=None):
     prices = price_discovery(matches, depth)
     if prices.empty:
         return pd.DataFrame(columns=CARD_COLUMNS)
+    # price_discovery carries a generic status; audited pregame status must replace it.
+    prices = prices.drop(columns=["research_status"], errors="ignore")
     safety = eligibility_dashboard(matches, odds, scan_time, now=now)
     base = matches.drop_duplicates(["ticker", "side"])
     keys = ["ticker", "side"]
