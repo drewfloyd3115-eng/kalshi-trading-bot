@@ -1,5 +1,7 @@
 """Manual scan-to-scan comparisons. No scheduling, API calls or order placement."""
 import pandas as pd
+from datetime import datetime, timezone
+from matcher import parse_time
 from config import MIN_EDGE_PP
 
 COLUMNS = ["event", "outcome_team", "ticker", "side", "previous_edge_pp",
@@ -7,7 +9,11 @@ COLUMNS = ["event", "outcome_team", "ticker", "side", "previous_edge_pp",
            "current_ask_cents", "ask_change_cents", "threshold_crossing",
            "kickoff_status", "research_status"]
 
-def scan_changes(previous, current, eligibility):
+def scan_changes(previous, current, eligibility, previous_time=None, current_time=None, now=None):
+    now = now or datetime.now(timezone.utc)
+    prev_at, curr_at = parse_time(previous_time), parse_time(current_time)
+    independent = bool(prev_at and curr_at and curr_at > prev_at)
+    fresh = bool(curr_at and -120 <= (now - curr_at).total_seconds() <= 300)
     if current is None or current.empty:
         return pd.DataFrame(columns=COLUMNS)
     before = {}
@@ -29,8 +35,9 @@ def scan_changes(previous, current, eligibility):
         old_ask = pd.to_numeric(prior.get("ask_cents"), errors="coerce") if prior is not None else float("nan")
         kickoff = str(evidence.get("kickoff_status", "UNKNOWN")) if evidence is not None else "UNKNOWN"
         quote = str(evidence.get("quote_status", "UNVERIFIED")) if evidence is not None else "UNVERIFIED"
-        eligible = kickoff.startswith("FUTURE") and quote == "CACHED RECENT"
-        crossed = bool(pd.notna(old_edge) and pd.notna(edge) and old_edge < MIN_EDGE_PP <= edge)
+        kickoff_at = parse_time(evidence.get("kickoff_utc")) if evidence is not None else None
+        eligible = bool(fresh and kickoff_at and kickoff_at > now and quote == "CACHED RECENT")
+        crossed = bool(independent and pd.notna(old_edge) and pd.notna(edge) and old_edge < MIN_EDGE_PP <= edge)
         rows.append({
             "event": r.get("event"), "outcome_team": r.get("outcome_team"),
             "ticker": key[0], "side": key[1],
@@ -39,8 +46,13 @@ def scan_changes(previous, current, eligibility):
             "previous_ask_cents": old_ask, "current_ask_cents": ask,
             "ask_change_cents": round(float(ask-old_ask), 2) if pd.notna(ask) and pd.notna(old_ask) else None,
             "threshold_crossing": "NEW +5pp — REVIEW ONLY" if crossed and eligible else ("CROSSED BUT INELIGIBLE" if crossed else "NO"),
-            "kickoff_status": kickoff,
-            "research_status": "PREGAME RESEARCH ONLY — NOT VERIFIED" if eligible else "BLOCKED — stale or unknown kickoff/quotes"
+            "kickoff_status": ("FUTURE — independently checked" if kickoff_at and kickoff_at > now else "PAST/UNKNOWN — blocked"),
+            "research_status": "PREGAME RESEARCH ONLY — NOT VERIFIED" if eligible and independent else "BLOCKED — scan integrity, kickoff or quotes unverified"
         })
-    return pd.DataFrame(rows, columns=COLUMNS).sort_values(
+    result = pd.DataFrame(rows, columns=COLUMNS)
+    result["previous_scan_utc"] = prev_at.isoformat() if prev_at else ""
+    result["current_scan_utc"] = curr_at.isoformat() if curr_at else ""
+    result["independent_scans"] = independent
+    result["scan_fresh_now"] = fresh
+    return result.sort_values(
         ["threshold_crossing", "current_edge_pp"], ascending=[True, False], na_position="last")
