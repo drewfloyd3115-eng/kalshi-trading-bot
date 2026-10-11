@@ -75,7 +75,7 @@ class SportsUITests(unittest.TestCase):
         markup = detail_panel_html(preview)
         self.assertIn("DESIGN PREVIEW", markup)
         self.assertIn("Estimated fair chance", markup)
-        self.assertIn("style=\"width:0.00%\" ", markup)
+        self.assertIn("style=\"width:0.00%\">", markup)
         self.assertNotIn("PRELIMINARY — not approved", markup)
 
     def test_market_detail_stale_scan_stays_blocked(self):
