@@ -472,13 +472,113 @@ def opportunities_page():
     st.caption("Shown estimates include an indicative one-share taker fee; "
                "actual fills, market rules and settlement are unverified. No trade is approved.")
 
+
+def detail_panel_html(row, scan_time=None, now=None):
+    """No-network, HTML-escaped illustration of cached market research."""
+    age, fresh = scan_age_label(scan_time, now=now)
+    preview = str(row.get("research_status", "")) == "DESIGN PREVIEW"
+    research = research_label(row)
+    if preview:
+        status, flag = "DESIGN PREVIEW — no live prices", "preview"
+    elif not fresh:
+        status, flag = "BLOCKED — stale or missing scan", ""
+    elif research.startswith("PRELIMINARY"):
+        status, flag = "PRELIMINARY — not approved", "review"
+    else:
+        status, flag = "BLOCKED — no verified trade", ""
+
+    def field(name, fallback="—"):
+        value = row.get(name)
+        if value is None:
+            return fallback
+        try:
+            if pd.isna(value):
+                return fallback
+        except (TypeError, ValueError):
+            return fallback
+        return escape(str(value)) if str(value).strip() else fallback
+
+    fair = pd.to_numeric(row.get("fair_pct"), errors="coerce")
+    ask = pd.to_numeric(row.get("ask_cents"), errors="coerce")
+    fair_valid = pd.notna(fair) and 0 < float(fair) < 100 and not preview
+    ask_valid = pd.notna(ask) and 0 < float(ask) < 100 and not preview
+    fair_pct = float(fair) if fair_valid else 0.0
+    ask_pct = float(ask) if ask_valid else 0.0
+    fair_label = f"{fair_pct:.2f}%" if fair_valid else "—"
+    ask_label = f"{ask_pct:.1f}¢" if ask_valid else "—"
+    fee = taker_fee(ask_pct, 1) if ask_valid else None
+    fee_label = f"{fee:.2f} USD" if fee is not None else "—"
+    cost_label = f"{(ask_pct / 100 + fee):.2f} USD" if fee is not None else "—"
+    edge = pd.to_numeric(row.get("net_edge_pp_1share"), errors="coerce")
+    edge_label = f"{float(edge):+.2f}pp" if pd.notna(edge) and not preview else "—"
+    quality = field("quote_quality", "UNVERIFIED")
+    reason = field("reason", "Independent verification unavailable")
+    return f'''
+<div class="kl-detail-hero">
+  <div class="kl-detail-eyebrow">{field("league", "CFB / NFL")} · CONTRACT INTELLIGENCE</div>
+  <div class="kl-detail-name">{field("event", "Matchup not loaded")}</div>
+  <div class="kl-detail-outcome">{field("outcome_team", "No outcome selected")} to win · {field("side")} route</div>
+  <div class="kl-detail-outcome">{field("ticker", "No contract selected")}</div>
+  <span class="kl-detail-pill {flag}">{escape(status)}</span>
+  <div class="kl-detail-note">{escape(age)} · indicative cached market research only</div>
+</div>
+<div class="kl-detail-grid">
+  <div class="kl-detail-stat"><small>Estimated fair chance</small><strong>{fair_label}</strong><em>Sportsbook consensus</em></div>
+  <div class="kl-detail-stat"><small>Kalshi ask snapshot</small><strong>{ask_label}</strong><em>Not an executable quote</em></div>
+  <div class="kl-detail-stat"><small>Net edge estimate</small><strong>{edge_label}</strong><em>One share, after estimated fee</em></div>
+  <div class="kl-detail-stat"><small>Est. cost for 1 share</small><strong>{cost_label}</strong><em>Includes fee estimate: {fee_label}</em></div>
+</div>
+<div class="kl-detail-panel">
+  <b>Estimated probability comparison</b>
+  <div class="kl-detail-bar-title"><span>Fair probability estimate</span><span>{fair_label}</span></div>
+  <div class="kl-detail-track"><div class="kl-detail-fill" style="width:{fair_pct:.2f}%"></div></div>
+  <div class="kl-detail-bar-title"><span>Kalshi ask, as % of payout</span><span>{ask_label}</span></div>
+  <div class="kl-detail-track"><div class="kl-detail-fill ask" style="width:{ask_pct:.2f}%"></div></div>
+  <div class="kl-detail-note">The difference between these bars does not verify positive EV.
+    The fee-adjusted edge depends on an unvalidated probability estimate and hypothetical prices.</div>
+</div>
+<div class="kl-detail-panel">
+  <b>Pregame and quote-quality checks</b>
+  <div class="kl-detail-checks">
+    <div class="kl-detail-check"><small>Kickoff eligibility</small><strong>{field("kickoff_status","NOT VERIFIED")}</strong></div>
+    <div class="kl-detail-check"><small>Quote status</small><strong>{field("quote_status","NOT VERIFIED")}</strong></div>
+    <div class="kl-detail-check"><small>Independent books</small><strong>{_display_number(row.get("books"),0)}</strong></div>
+    <div class="kl-detail-check"><small>Book disagreement</small><strong>{_display_number(row.get("book_spread_pp"),2,"pp")}</strong></div>
+    <div class="kl-detail-check"><small>Oldest quote at scan</small><strong>{_display_number(row.get("oldest_quote_minutes"),1,"m")}</strong></div>
+    <div class="kl-detail-check"><small>Depth check</small><strong>{field("depth_status","NOT INSPECTED")}</strong></div>
+  </div>
+  <div class="kl-detail-note">Kickoff UTC: {field("kickoff_utc","NOT VERIFIED")}<br>Quote quality: {quality}</div>
+  <div class="kl-detail-note"><b>Reason:</b> {reason}</div>
+</div>
+'''
+
+
 def detail_page():
-    _, data = _cached_data()
-    st.markdown("## Market Detail")
-    st.caption("Research explanation drawn from the latest cached scan; no additional sportsbook API calls.")
+    meta, data = _cached_data()
+    st.markdown("""
+<div class="kl-opp-head">
+  <div class="kl-opp-eyebrow">Market intelligence / CFB + NFL</div>
+  <div class="kl-opp-headline">Market Detail</div>
+  <div class="kl-opp-descr">Fair estimates, indicative entry prices, fee breakdowns,
+    sportsbook evidence and reasons for rejection. Research only.</div>
+</div>""", unsafe_allow_html=True)
     if data.empty:
-        st.info("No cached market details available. Run a paper scan from Home.")
+        st.info("No contract selected. Below is a layout preview, not a real market.")
+        preview = {
+            "league": "CFB / NFL", "event": "Matchup not loaded",
+            "outcome_team": "No outcome selected",
+            "ticker": None, "side": None,
+            "fair_pct": None, "ask_cents": None, "net_edge_pp_1share": None,
+            "books": None, "book_spread_pp": None,
+            "oldest_quote_minutes": None, "depth_status": "NOT INSPECTED",
+            "kickoff_status": "NOT VERIFIED", "quote_status": "NOT VERIFIED",
+            "kickoff_utc": None, "reason": "DESIGN PREVIEW ONLY — no price or contract loaded",
+            "research_status": "DESIGN PREVIEW"
+        }
+        st.markdown(detail_panel_html(preview), unsafe_allow_html=True)
+        st.caption("Placeholder values only · no API requests · live trading disabled")
         return
+
     routes = {str(r["ticker"]) + "|" + str(r["side"]): r for _, r in data.iterrows()}
     keys = list(routes)
     selected = st.session_state.get("sports_selected_route")
@@ -486,34 +586,35 @@ def detail_page():
         selected = keys[0]
     if st.session_state.get("sports_detail_route") not in keys:
         st.session_state["sports_detail_route"] = selected
-    route = st.selectbox("Winning outcome / route", keys, key="sports_detail_route",
-                         format_func=lambda x: str(routes[x]["event"]) + " — " +
-                             str(routes[x]["outcome_team"]).title() + " (" + str(routes[x]["side"]) + ")")
+    route = st.selectbox(
+        "Select winning outcome / contract", keys, key="sports_detail_route",
+        format_func=lambda x: str(routes[x]["event"]) + " — " +
+            str(routes[x]["outcome_team"]).title() + " (" + str(routes[x]["side"]) + ")")
     row = routes[route]
-    edge = pd.to_numeric(row["net_edge_pp_1share"], errors="coerce")
-    st.markdown("### " + str(row["event"]))
-    st.caption(str(row["outcome_team"]).title() + " to win · " + str(row["ticker"]) + " / " + str(row["side"]))
-    a,b,c = st.columns(3)
-    a.metric("Kalshi ask (indicative)", f"{float(row['ask_cents']):.1f}¢")
-    b.metric("Fair chance (estimate)", f"{float(row['fair_pct']):.2f}%")
-    c.metric("Net edge (1 share)", f"{edge:+.2f}pp" if pd.notna(edge) else "N/A")
-    st.markdown("#### Verification")
-    if row["research_status"] == "REVIEW ONLY — NOT APPROVED":
-        st.info("PREGAME RESEARCH ONLY — NOT APPROVED. Exact settlement, executable price, and fees still require validation.")
-    else:
-        st.error("BLOCKED — NO VERIFIED TRADE")
-    st.write(str(row["reason"]))
-    st.markdown("#### Source and price quality")
-    c1, c2 = st.columns(2)
-    c1.metric("Independent books", str(row.get("books") or "N/A"))
-    c2.metric("Book disagreement", str(row.get("book_spread_pp") or "N/A") + "pp")
-    st.caption("Quote quality: " + str(row.get("quote_quality") or "Unverified"))
-    st.caption("Oldest quoted age at scan: " + str(row.get("oldest_quote_minutes") or "Unknown") + " minutes")
-    st.caption("Order-book depth: " + str(row.get("depth_status") or "Not inspected"))
-    fee = taker_fee(float(row["ask_cents"]), 1)
-    st.caption(f"Estimated one-share taker fee: ${fee:.2f}; final fee schedule not certified.")
-    st.warning("Paper research only. No real-money order placement. Price, kickoff, injury context, and settlement rules must be independently verified.")
-
+    st.markdown(detail_panel_html(row, meta.get("time")), unsafe_allow_html=True)
+    st.warning("NO VERIFIED TRADE — research estimates are not actual fills. Live trading disabled.")
+    with st.expander("Explain the fee-adjusted estimate"):
+        fair = pd.to_numeric(row.get("fair_pct"), errors="coerce")
+        ask = pd.to_numeric(row.get("ask_cents"), errors="coerce")
+        if pd.notna(fair) and pd.notna(ask) and 0 < float(ask) < 100:
+            fee = taker_fee(float(ask), 1)
+            net = float(fair) - float(ask) - 100 * fee
+            st.write(
+                f"Fair estimate {float(fair):.2f}% − ask {float(ask):.1f}pp"
+                f" − fee {100*fee:.2f}pp = **{net:+.2f}pp** estimated net edge.")
+            st.caption("Generic taker fee, rounded for one share; market-specific fees unverified.")
+        else:
+            st.caption("No valid estimate is available.")
+    with st.expander("Contract research and verification limits"):
+        st.write("**Ticker:**", str(row.get("ticker", "—")))
+        st.write("**Winning outcome:**", str(row.get("outcome_team", "—")))
+        st.write("**Maximum theoretical entry price for +5pp:**",
+                 _display_number(row.get("max_entry_cents_1share"), 0, "¢"))
+        st.write("**Indicative price drop required:**",
+                 _display_number(row.get("price_drop_needed_cents"), 1, "¢"))
+        st.write("**Depth status:**", str(row.get("depth_status") or "Not inspected"))
+        st.caption("Cached depth was inspected for only selected outcomes. This does not verify an executable price.")
+        st.caption("Settlement rules, live kickoff, liquidity, fees, and probability accuracy must be verified separately.")
 
 def portfolio_page(bankroll, other_exposure):
     st.markdown("## Paper Portfolio")
