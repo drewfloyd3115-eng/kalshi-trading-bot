@@ -139,8 +139,7 @@ if "quick_results" in st.session_state:
                        if not latest_prices.empty else pd.DataFrame())
     review_count = (int((latest_eligibility["research_status"] != "BLOCKED").sum())
                     if not latest_eligibility.empty else 0)
-    passing_count = (int((pd.to_numeric(latest_eligibility["net_edge_pp_1share"],
-                                       errors="coerce") >= 5).sum())
+    passing_count = (int((latest_eligibility["edge_status"] == "PASSES PRELIMINARY FILTER").sum())
                      if not latest_eligibility.empty else 0)
     st.warning("NO VERIFIED TRADE — research estimates are not executable orders.")
     summary_a, summary_b, summary_c = st.columns(3)
