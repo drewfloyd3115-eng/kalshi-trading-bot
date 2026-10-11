@@ -12,7 +12,8 @@ class ExitDepthTests(unittest.TestCase):
     def setUp(self):
         self.now = datetime(2026, 10, 11, 16, 30, tzinfo=timezone.utc)
         self.position = {
-            "position_id": "a" * 32, "ticker": "KXNCAAFGAME-EXAMPLE",
+            "position_id": "a" * 32, "league": "CFB",
+            "ticker": "KXNCAAFGAME-EXAMPLE",
             "side": "YES", "remaining_shares": 4,
             "remaining_cost_usd": 2.48,
         }
@@ -139,6 +140,27 @@ class ExitDepthTests(unittest.TestCase):
                                    book_fetch=lambda t: calls.append(t), observed_at=self.now)
         self.assertEqual(calls, [])
         self.assertIn("requested quantity", r["reason"].lower())
+
+    def test_fake_ticker_rejected_without_public_request(self):
+        calls = []
+        fake = dict(self.position, ticker="KXCFB-TEST-MARKET")
+        r = review_public_position(
+            fake, market_fetch=lambda t: calls.append(t),
+            book_fetch=lambda t: calls.append(t), observed_at=self.now)
+        self.assertEqual(calls, [])
+        self.assertIn("not in the supported", r["reason"])
+        self.assertIn("UNVERIFIED", r["status"])
+
+    def test_changed_review_quantity_invalidates_snapshot(self):
+        r = estimate_exit(self.position, self.market, self.book,
+                          requested_shares=2, observed_at=self.now)
+        okay, _ = snapshot_integrity(r, self.position,
+                                     requested_shares=2, now=self.now)
+        self.assertTrue(okay)
+        okay, msg = snapshot_integrity(r, self.position,
+                                       requested_shares=3, now=self.now)
+        self.assertFalse(okay)
+        self.assertIn("quantity changed", msg)
 
     def test_sort_and_aggregate_bid_levels_descending(self):
         r = _bid_levels({"yes_bids": [[50, 2], [60, 2], [60, 3]],
