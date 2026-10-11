@@ -1,6 +1,9 @@
 """Mobile-first, read-only sports interface. Never places orders or fetches remote data."""
 import pandas as pd
 import streamlit as st
+from html import escape
+from datetime import datetime, timezone
+from matcher import parse_time
 
 from config import MIN_EDGE_PP
 from edge_engine import taker_fee
@@ -141,6 +144,63 @@ div.stButton > button[kind="primary"]:hover {background:#086bd2; color:white;}
     padding:14px;border-radius:13px;margin:8px 0 14px;}
 .kl-safe {color:#b5d0e5;font-size:.80rem;line-height:1.55;margin-top:5px;}
 .kl-small {color:#8fabc7;font-size:0.78rem;}
+
+/* Football-themed opportunity cards are CSS-only and use verified values
+   from cached scanner data. No clickable HTML or client-side data fetching. */
+.kl-opp-head {
+    background: linear-gradient(112deg,#092943,#0a2038);
+    border:1px solid #285576; border-radius:15px;
+    padding:17px 15px; margin:6px 0 15px;
+}
+.kl-opp-eyebrow {
+    font-size:.70rem; letter-spacing:.15em; color:#74beff;
+    font-weight:750; text-transform:uppercase;
+}
+.kl-opp-headline {color:#f1f7ff; font-size:1.35rem; font-weight:850; margin:3px 0 5px;}
+.kl-opp-descr {font-size:.82rem; color:#bed3e9; line-height:1.45;}
+.kl-opp-card {
+    border:1px solid #244a6b; border-radius:16px;
+    background:radial-gradient(ellipse at 100% 0%,#103455 0%,transparent 64%),
+               linear-gradient(130deg,#09243d 0%,#071725 100%);
+    padding:14px; margin-top:10px; margin-bottom:6px;
+    box-shadow:0 5px 12px #030a164d;
+}
+.kl-opp-titleline {display:flex; align-items:flex-start; gap:12px; justify-content:space-between;}
+.kl-opp-name {font-size:1.02rem; font-weight:800; color:#eaf5ff; line-height:1.28;}
+.kl-opp-outcome {color:#a9c9e8;font-size:.79rem;margin-top:5px;}
+.kl-opp-edge {
+    font-size:1.13rem;font-weight:850; white-space:nowrap; text-align:right;
+    color:#eaf4ff; border:1px solid #416382; border-radius:9px;
+    background:#10304a; padding:5px 8px; line-height:1.15;
+}
+.kl-opp-edge span {display:block;font-size:.62rem;font-weight:650;color:#a5c3df;margin-top:3px;}
+.kl-opp-flag {
+    display:inline-block; border:1px solid #4b647c; background:#182b40;
+    border-radius:7px;color:#d2e7fa;padding:3px 8px;
+    font-size:.70rem;font-weight:750;margin:9px 0;
+}
+.kl-opp-flag.review {border-color:#b3832f;background:#37290d;color:#ffd58d;}
+.kl-opp-flag.blocked {border-color:#805361;background:#321d29;color:#ffb3bd;}
+.kl-opp-figures {
+    display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:7px; margin:3px 0 10px;
+}
+.kl-opp-figure {background:#071b2d;border:1px solid #24435e;border-radius:9px;padding:9px 7px;min-width:0;}
+.kl-opp-figure small {display:block;color:#9ab8d6;font-size:.66rem;line-height:1.25;}
+.kl-opp-figure strong {display:block;color:#f1f7ff;font-size:1.0rem;margin-top:5px;}
+.kl-opp-meta {display:flex;gap:7px;flex-wrap:wrap;margin:8px 0;color:#a8c9e7;font-size:.72rem;}
+.kl-opp-meta span {border:1px solid #284561;border-radius:7px;padding:3px 7px;background:#092137;}
+.kl-opp-reason {color:#d1deec;font-size:.74rem;line-height:1.5;border-top:1px solid #27415a;padding-top:10px;}
+.kl-opp-empty {padding:14px;border:1px dashed #426486;border-radius:12px;
+    background:#0b2338;margin-top:12px;color:#acc8e2;font-size:.85rem;}
+@media (max-width:650px) {
+    .kl-opp-card {padding:12px;border-radius:13px;margin-top:8px;}
+    .kl-opp-head {padding:13px;}
+    .kl-opp-name {font-size:.92rem;}
+    .kl-opp-edge {font-size:1.03rem;}
+    .kl-opp-figure {padding:8px 6px;}
+    .kl-opp-figure strong {font-size:.96rem;}
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -230,41 +290,140 @@ def home_overview(bankroll, extra_exposure):
     st.caption("Displayed odds, edges, and eligibility are snapshots. No observations are approved trades.")
 
 
+
+def _display_number(value, digits=1, suffix=""):
+    """Printable finite number or a conspicuous missing-value marker."""
+    number = pd.to_numeric(value, errors="coerce")
+    if pd.isna(number) or not (-1000000 < float(number) < 1000000):
+        return "—"
+    return f"{float(number):.{digits}f}{suffix}"
+
+
+def scan_age_label(scan_time, now=None):
+    """Show currentness without converting stale prices into approval signals."""
+    at = parse_time(scan_time)
+    now = now or datetime.now(timezone.utc)
+    if not at:
+        return "Scan time unknown — not current", False
+    seconds = (now - at).total_seconds()
+    if seconds < -120:
+        return "Scan time inconsistent — not current", False
+    if seconds < 0:
+        return "Just scanned (clock difference)", True
+    if seconds > 300:
+        return f"STALE — scanned {int(seconds // 60)}m ago", False
+    return f"Scanned {max(0, int(seconds // 60))}m ago", True
+
+
+def opportunity_card_html(row):
+    """HTML view only. Escapes all feed values; never authorizes paper fills."""
+    title = escape(str(row.get("event", "Unknown matchup")))
+    winning = escape(str(row.get("outcome_team", "Unknown outcome")).title())
+    league = escape(str(row.get("league", "Unknown league")))
+    side = escape(str(row.get("side", "Unknown side")))
+    estimated_edge = pd.to_numeric(row.get("net_edge_pp_1share"), errors="coerce")
+    edge_text = f"{float(estimated_edge):+.2f}pp" if pd.notna(estimated_edge) else "—"
+    status = research_label(row)
+    flagged = "review" if status.startswith("PRELIMINARY") else "blocked"
+    ask = _display_number(row.get("ask_cents"), 1, "¢")
+    fair = _display_number(row.get("fair_pct"), 1, "%")
+    books = _display_number(row.get("books"), 0)
+    disagreement = _display_number(row.get("book_spread_pp"), 2, "pp")
+    age = _display_number(row.get("oldest_quote_minutes"), 1, "m")
+    depth = escape(str(row.get("depth_status") or "NOT INSPECTED"))
+    reason = escape(str(row.get("reason") or "Independent checks required"))
+    return f'''
+<div class="kl-opp-card">
+  <div class="kl-opp-titleline">
+    <div>
+      <div class="kl-opp-name">{title}</div>
+      <div class="kl-opp-outcome">{winning} to win · {league} · {side} route</div>
+    </div>
+    <div class="kl-opp-edge">{edge_text}<span>Estimated net edge</span></div>
+  </div>
+  <div class="kl-opp-flag {flagged}">{escape(status)}</div>
+  <div class="kl-opp-figures">
+    <div class="kl-opp-figure"><small>Indicative ask</small><strong>{ask}</strong></div>
+    <div class="kl-opp-figure"><small>Fair estimate</small><strong>{fair}</strong></div>
+    <div class="kl-opp-figure"><small>Independent books</small><strong>{books}</strong></div>
+  </div>
+  <div class="kl-opp-meta"><span>Book spread: {disagreement}</span><span>Oldest quote: {age}</span><span>Depth: {depth}</span></div>
+  <div class="kl-opp-reason">Why: {reason}</div>
+</div>
+'''
+
+
 def opportunities_page():
     meta, data = _cached_data()
-    st.markdown("## Opportunities")
-    st.caption("Ranked by estimated net edge. One best YES/NO route per distinct winning outcome. Paper research only.")
+    st.markdown("""
+<div class="kl-opp-head">
+  <div class="kl-opp-eyebrow">Market research / CFB + NFL</div>
+  <div class="kl-opp-headline">Opportunities</div>
+  <div class="kl-opp-descr">Ranked winning outcomes, estimated edges and safety checks.
+  No recommendations or executable orders.</div>
+</div>""", unsafe_allow_html=True)
+    age, fresh = scan_age_label(meta.get("time") if isinstance(meta, dict) else None)
+    if fresh:
+        st.caption("◷ " + age + " · Cached sportsbook comparisons — no API request")
+    else:
+        st.warning(age + ". All quotes are historical; rerunning this view does not refresh them.")
     if data.empty:
-        st.info("No cached market comparisons. Run a CFB or NFL paper scan from Home.")
+        st.info("No cached matched markets. Return to Home to run a manual CFB or NFL paper scan when ready.")
+        st.markdown("""
+<div class="kl-opp-empty"><strong>Market cards appear here after a scan.</strong>
+<br>Each card will show an indicative price, estimated probability,
+net edge, quote quality, and exactly why the outcome is blocked or under review.
+No demonstration trades or made-up prices are displayed.</div>
+""", unsafe_allow_html=True)
         return
+
+    total = len(data)
+    ready = int((data["research_status"] == "REVIEW ONLY — NOT APPROVED").sum())
+    blocked = total - ready
+    a, b, c = st.columns(3)
+    a.metric("Outcomes", total)
+    b.metric("Pregame review", ready)
+    c.metric("Blocked", blocked)
+    st.caption("Pregame review means more verification is required — not an approved trade.")
     league_options = ["All"] + sorted(str(x) for x in data["league"].dropna().unique())
-    left, right = st.columns(2)
-    league = left.selectbox("League", league_options, key="sports_filter_league")
-    status = right.selectbox("Status", ["All", "Pregame review", "Blocked"], key="sports_filter_status")
+    league = st.selectbox("League", league_options, key="sports_filter_league")
+    status = st.selectbox("Verification", ["All", "Pregame review", "Blocked"],
+                          key="sports_filter_status")
+    order = st.selectbox("Rank by", ["Highest estimated edge", "Closest to +5pp",
+                                     "Smallest book disagreement"], key="sports_filter_rank")
+    search = st.text_input("Find a game or team", key="sports_filter_search",
+                           placeholder="Search cached games")
     if league != "All":
         data = data[data["league"] == league]
     if status == "Pregame review":
         data = data[data["research_status"] == "REVIEW ONLY — NOT APPROVED"]
     elif status == "Blocked":
         data = data[data["research_status"] != "REVIEW ONLY — NOT APPROVED"]
+    if search.strip():
+        query = search.strip()
+        data = data[data["event"].astype(str).str.contains(query, case=False, regex=False, na=False) |
+                    data["outcome_team"].astype(str).str.contains(query, case=False, regex=False, na=False)]
     if data.empty:
-        st.info("No outcomes meet these display filters.")
+        st.info("No cached outcomes match your filters.")
         return
-    st.caption(f"{len(data)} outcomes shown · Last scan {meta.get('time', 'Unknown')} UTC")
-    for i, row in data.head(25).iterrows():
-        edge = pd.to_numeric(row["net_edge_pp_1share"], errors="coerce")
-        with st.container(border=True):
-            st.markdown(f"**{row['event']}**")
-            st.caption(f"{str(row['outcome_team']).title()} to win · {row['league']} · {row['side']} route")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Ask", f"{float(row['ask_cents']):.1f}¢")
-            c2.metric("Fair estimate", f"{float(row['fair_pct']):.1f}%")
-            c3.metric("Net edge est.", f"{edge:+.2f}pp" if pd.notna(edge) else "N/A")
-            st.caption(research_label(row) + " · " + str(row.get("reason","")))
-            st.button("Inspect market", key=f"opportunity_detail_{i}", use_container_width=True,
-                      on_click=go_to_detail, args=(row["ticker"], row["side"]))
-    st.warning("NO VERIFIED TRADE. A nominal +5pp edge is not an executable offer or a validated probability.")
-
+    if order == "Smallest book disagreement":
+        data = data.sort_values("book_spread_pp", ascending=True, na_position="last")
+    elif order == "Closest to +5pp":
+        data = data.assign(_gap=(MIN_EDGE_PP - pd.to_numeric(
+            data["net_edge_pp_1share"], errors="coerce")).abs()).sort_values(
+                "_gap", ascending=True, na_position="last")
+    else:
+        data = data.sort_values("net_edge_pp_1share", ascending=False, na_position="last")
+    st.caption(f"{len(data)} outcomes shown · Best available route per outcome · No live orders")
+    for _, row in data.head(25).iterrows():
+        st.markdown(opportunity_card_html(row), unsafe_allow_html=True)
+        key = str(row["ticker"]) + "|" + str(row["side"])
+        # Native button triggers Streamlit navigation only, not API fetching.
+        st.button("View contract research →", key="opportunity_detail_" + key,
+                  use_container_width=True, on_click=go_to_detail,
+                  args=(row["ticker"], row["side"]))
+    st.caption("Shown estimates include an indicative one-share taker fee; "
+               "actual fills, market rules and settlement are unverified. No trade is approved.")
 
 def detail_page():
     _, data = _cached_data()
