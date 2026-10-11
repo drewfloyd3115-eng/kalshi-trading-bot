@@ -58,8 +58,11 @@ class ManualPaperLedgerUITests(unittest.TestCase):
 
         app.button_group(key="sports_portfolio_area").set_value("History").run()
         self.assertFalse(app.exception, str(app.exception))
-        self.assertEqual(app.button(key="ledger_download").label,
-                         "Download position ledger CSV")
+        markdown = "\n".join(str(item.value) for item in app.markdown)
+        self.assertIn("Manual paper position ledger", markdown)
+        self.assertEqual(ledger_summary(app.session_state["position_ledger"])["transactions"], 2)
+        # Streamlit's AppTest omits download_button elements; CSV bytes are
+        # covered by the pure ledger export/import roundtrip regression test.
 
 
 if __name__ == "__main__":
