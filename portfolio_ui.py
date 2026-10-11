@@ -3,6 +3,10 @@ from html import escape
 import pandas as pd
 import streamlit as st
 from paper_history import HISTORY_COLUMNS, summary as paper_summary
+from position_ledger import (
+    empty_ledger, export_ledger, import_ledger, ledger_summary, open_positions,
+    record_entry, record_exit, validate_ledger,
+)
 
 
 def portfolio_view_model(history, queue, bankroll, other_exposure, queue_exposure):
@@ -44,11 +48,14 @@ def _portfolio_metric(label, value, description):
 
 def portfolio_overview_html(model):
     """HTML escapes visible values; includes no fabricated trades or returns."""
+    ledger = model.get("manual_ledger", {})
     metrics = [
         ("Paper bankroll", "USD " + f'{model["bankroll"]:,.2f}', "Hypothetical balance setting"),
+        ("Open manual positions", str(ledger.get("open_positions", 0)),
+         "Explicitly recorded paper fills"),
+        ("Open ledger cost basis", "USD " + f'{ledger.get("open_cost_usd",0):,.2f}',
+         "Entered cost and fees; unverified"),
         ("Queued paper exposure", "USD " + f'{model["queue_exposure"]:,.2f}', "Not filled positions"),
-        ("Open paper fills", str(model["open_paper_fills"]), "Hypothetical, unresolved"),
-        ("Settled paper records", str(model["closed"]), "Gross P&L excludes fees")
     ]
     cards = "\n".join(_portfolio_metric(*row) for row in metrics)
     return """
@@ -120,15 +127,193 @@ _STYLES = """
 """
 
 
+def _position_card(row):
+    """Paper ledger position card; never suggest current sale values."""
+    event = escape(str(row["event"]))
+    label = escape(str(row["ticker"]))
+    outcome = escape(str(row["outcome_team"]))
+    side = escape(str(row["side"]))
+    return (
+        '<div class="kl-port-record"><b>' + event + '</b>' +
+        '<small>' + outcome + ' · ' + side + ' · ' + label + '</small>' +
+        '<span class="kl-port-chip pending">MANUAL PAPER FILL · NO EXIT PRICE VERIFIED</span>' +
+        '<div class="kl-port-muted">Remaining: ' + str(int(row["remaining_shares"])) +
+        ' / ' + str(int(row["entry_shares"])) + ' shares · entry ' +
+        str(int(row["entry_cents"])) + '¢ · remaining cost basis USD ' +
+        f'{float(row["remaining_cost_usd"]):.2f}' +
+        '. Amounts are manual hypotheticals, not live balances.</div></div>'
+    )
+
+
+def _manual_entry_form(bankroll, other_exposure):
+    with st.expander("Record a hypothetical paper entry", expanded=False):
+        st.caption("This requires manually entering a hypothetical fill. "
+                   "It is not an actual market execution or a scanner recommendation. "
+                   "The 1% per-market and 3% total paper bankroll limits apply.")
+        with st.form("position_entry_form", clear_on_submit=True):
+            league = st.selectbox("Football league", ["CFB", "NFL"],
+                                  key="ledger_entry_league")
+            ticker = st.text_input("Exact Kalshi market ticker", max_chars=128,
+                                   placeholder="KXCFB-EXACT-TICKER", key="ledger_entry_ticker")
+            event = st.text_input("Game / matchup", max_chars=200,
+                                  placeholder="Team A vs Team B", key="ledger_entry_event")
+            winner = st.text_input("Winning outcome / team", max_chars=120,
+                                   placeholder="Team A", key="ledger_entry_winner")
+            side = st.radio("Contract side", ["YES", "NO"], horizontal=True,
+                            key="ledger_entry_side")
+            shares = st.number_input("Hypothetical shares bought", min_value=1,
+                                     max_value=100000, value=1, step=1, key="ledger_entry_shares")
+            price = st.number_input("Entry price (cents / share)", min_value=1,
+                                    max_value=99, value=50, step=1, key="ledger_entry_price")
+            fee = st.number_input("Total entry fee entered ($)", min_value=0.0,
+                                  max_value=100000.0, value=0.0, step=0.01, format="%.2f",
+                                  key="ledger_entry_fee")
+            st.caption("Fees are manually entered and NOT verified; entering $0 does "
+                       "not mean the actual contract has no fees.")
+            notes = st.text_input("Optional paper-entry note", max_chars=350,
+                                  key="ledger_entry_notes")
+            confirmed = st.checkbox(
+                "I confirm this is a manually simulated fill, not a real trade or verified price.",
+                key="ledger_entry_confirm")
+            save = st.form_submit_button("Save hypothetical entry", type="primary",
+                                         use_container_width=True)
+        if save:
+            if not confirmed:
+                st.error("Confirm that this is only a simulated manual fill.")
+            else:
+                try:
+                    new_ledger = record_entry(
+                        st.session_state.position_ledger,
+                        league=league, ticker=ticker.strip(), event=event,
+                        outcome_team=winner, side=side, shares=int(shares),
+                        price_cents=int(price), fee_usd=f"{fee:.2f}",
+                        bankroll=f"{bankroll:.2f}",
+                        other_exposure=f"{other_exposure:.2f}",
+                        queued_exposure=f"{float(st.session_state.get('paper_exposure', 0)):.2f}",
+                        notes="MANUAL HYPOTHETICAL ENTRY — UNVERIFIED. " + notes
+                    )
+                    st.session_state.position_ledger = new_ledger
+                    st.session_state.ledger_notice = "Manual hypothetical entry recorded. Download a CSV backup in History."
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(f"Paper entry rejected: {exc}")
+
+
+def _manual_exit_form(ledger):
+    positions = open_positions(ledger)
+    st.markdown("#### Manually record a hypothetical exit")
+    st.caption("This is an accounting simulation, NOT an exit signal. "
+               "The app has not verified a sellable bid, available depth, or fee schedule.")
+    if positions.empty:
+        st.info("No open manual paper positions exist. Record a hypothetical entry in Open paper fills first.")
+        return
+    with st.form("position_exit_form", clear_on_submit=True):
+        keys = positions["position_id"].tolist()
+        selected = st.selectbox("Manual position to partially or fully exit",
+                                keys, key="ledger_exit_position",
+                                format_func=lambda k: (
+                                    str(positions.loc[positions["position_id"] == k, "event"].iloc[0])
+                                    + " · " + str(positions.loc[positions["position_id"] == k, "side"].iloc[0])
+                                    + " · " + str(positions.loc[positions["position_id"] == k, "remaining_shares"].iloc[0])
+                                    + " remaining shares"
+                                ))
+        position = positions.loc[positions["position_id"] == selected].iloc[0]
+        st.caption(f'Entry: {int(position["entry_cents"])}¢ per share · '
+                   f'{int(position["remaining_shares"])} shares available')
+        shares = st.number_input("Shares to hypothetically sell",
+                                 min_value=1, max_value=int(position["remaining_shares"]),
+                                 value=int(position["remaining_shares"]), step=1,
+                                 key="ledger_exit_shares")
+        price = st.number_input("Manually assumed exit price (cents / share)",
+                                min_value=1, max_value=99, value=50, step=1,
+                                key="ledger_exit_price")
+        fee = st.number_input("Total exit fee entered ($)", min_value=0.0,
+                              max_value=100000.0, value=0.0, step=0.01,
+                              format="%.2f", key="ledger_exit_fee")
+        notes = st.text_input("Optional exit note", max_chars=350,
+                              key="ledger_exit_notes")
+        confirmed = st.checkbox(
+            "I confirm the exit price is hypothetical and does not represent a verified bid.",
+            key="ledger_exit_confirm")
+        submit = st.form_submit_button("Record hypothetical partial/full exit",
+                                       type="primary", use_container_width=True)
+    if submit:
+        if not confirmed:
+            st.error("Confirm that this is only a hypothetical manual exit.")
+        else:
+            try:
+                updated = record_exit(
+                    ledger, selected, shares=int(shares), price_cents=int(price),
+                    fee_usd=f"{fee:.2f}",
+                    notes="MANUAL HYPOTHETICAL EXIT — UNVERIFIED. " + notes)
+                st.session_state.position_ledger = updated
+                st.session_state.ledger_notice = (
+                    "Manual hypothetical exit recorded. Net P&L uses entered fees only. "
+                    "Download a CSV backup in History.")
+                st.rerun()
+            except ValueError as exc:
+                st.error(f"Paper exit rejected: {exc}")
+
+
+def _ledger_history(ledger):
+    st.markdown("### Manual paper position ledger")
+    st.caption("Export after every session: positions are stored in this browser session "
+               "until you download and later restore the ledger.")
+    st.download_button(
+        "Download position ledger CSV",
+        export_ledger(ledger),
+        file_name="kalshi_position_ledger.csv", mime="text/csv",
+        key="ledger_download", use_container_width=True)
+    if not ledger.empty:
+        visible = ["recorded_at_utc", "event", "ticker", "side", "action",
+                   "shares", "price_cents", "fee_usd", "position_id"]
+        st.dataframe(ledger[visible], hide_index=True, use_container_width=True)
+    else:
+        st.info("No manually recorded position transactions yet.")
+
+    with st.expander("Restore / replace ledger from CSV", expanded=False):
+        st.warning("Import REPLACES the current manual position ledger. Download your "
+                   "existing CSV first. Legacy scan history is unaffected.")
+        upload = st.file_uploader("Position ledger backup CSV",
+                                  type=["csv"], key="ledger_import_file")
+        confirm = st.checkbox("I understand this replaces my current manual position ledger.",
+                              key="ledger_import_confirm")
+        if st.button("Replace manual ledger from file", key="ledger_import_go"):
+            if upload is None or not confirm:
+                st.error("Select a valid ledger backup and confirm replacement.")
+            else:
+                try:
+                    imported = import_ledger(upload.getvalue())
+                    st.session_state.position_ledger = imported
+                    st.session_state.ledger_notice = (
+                        "Position ledger restored from CSV. Entries were not executed as live trades.")
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(f"CSV restore rejected; ledger unchanged: {exc}")
+
+
 def portfolio_page(bankroll, other_exposure):
-    """Pure presentation over cached session research; never fetches odds."""
+    """Pure presentation over cached paper entries; no network or orders."""
     st.markdown(_STYLES, unsafe_allow_html=True)
+    if "position_ledger" not in st.session_state:
+        st.session_state.position_ledger = empty_ledger()
+    # Fail closed on invalid session state; imported CSV is always validated
+    # before replacing this state.
+    try:
+        ledger = validate_ledger(st.session_state.position_ledger)
+    except ValueError as exc:
+        st.error(f"Position ledger validation failed. No entries or exits permitted: {exc}")
+        return
+    notice = st.session_state.pop("ledger_notice", None)
+    if notice:
+        st.success(notice)
     model = portfolio_view_model(
         st.session_state.get("paper_history"),
         st.session_state.get("queue", []),
         bankroll, other_exposure,
         st.session_state.get("paper_exposure", 0.0)
     )
+    model["manual_ledger"] = ledger_summary(ledger)
     st.markdown(portfolio_overview_html(model), unsafe_allow_html=True)
     st.caption("Paper research only · no account connection or automatic settlement.")
     area = st.pills(
@@ -164,8 +349,31 @@ def portfolio_page(bankroll, other_exposure):
         if model["other_exposure"]:
             st.caption("Additional manual exposure assumption (not verified): USD " +
                        f'{model["other_exposure"]:,.2f}')
+        if model["manual_ledger"]["has_exits"]:
+            st.metric("Manual hypothetical net P&L — entered fees only",
+                      "USD " + f'{model["manual_ledger"]["realized_net_usd"]:+,.2f}')
+            st.caption("Based solely on your manually recorded hypothetical prices and fees; "
+                       "not verified market execution or actual gains.")
+        if model["open_paper_fills"] or model["closed"]:
+            st.caption(f'{model["open_paper_fills"]} legacy journal paper fills and '
+                       f'{model["closed"]} legacy settled records are tracked separately '
+                       "from the new manual position ledger.")
 
     elif area == "Open paper fills":
+        st.markdown("### Manual position ledger")
+        manual_positions = open_positions(ledger)
+        if manual_positions.empty:
+            st.info("No manually recorded open paper positions.")
+        else:
+            st.caption(str(len(manual_positions)) + " open manual paper positions; "
+                       "there are no verified current sell bids or market valuations.")
+            for _, record in manual_positions.head(30).iterrows():
+                st.markdown(_position_card(record), unsafe_allow_html=True)
+            if len(manual_positions) > 30:
+                st.caption("Showing 30 positions; view all transactions in History.")
+        _manual_entry_form(bankroll, other_exposure)
+
+        st.markdown("#### Legacy imported paper journal fills")
         st.markdown("### Unresolved paper positions")
         st.caption("Only journal records explicitly marked PAPER_FILLED and UNRESOLVED appear here.")
         if model["open_rows"].empty:
@@ -180,7 +388,8 @@ def portfolio_page(bankroll, other_exposure):
                    "are not verified by the existing journal.")
 
     elif area == "History":
-        st.markdown("### Paper journal")
+        _ledger_history(ledger)
+        st.markdown("### Legacy observation / settlement journal")
         if model["history"].empty:
             st.info("No stored paper records in this session. Use Research to import "
                     "a journal CSV or export a backup.")
@@ -213,3 +422,5 @@ def portfolio_page(bankroll, other_exposure):
                 "automatic sell order or background monitor.")
         st.link_button("Technical exit-review roadmap",
                        "https://github.com/drewfloyd3115-eng/kalshi-trading-bot/issues/1")
+        st.divider()
+        _manual_exit_form(ledger)
