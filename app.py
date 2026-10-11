@@ -27,7 +27,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 3.8 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 3.9 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -115,9 +115,9 @@ if "quick_results" in st.session_state:
             st.download_button("Download coverage audit CSV",
                 coverage_table.to_csv(index=False).encode("utf-8"),
                 file_name="kalshi_coverage_audit.csv", mime="text/csv")
-    st.subheader("Price discovery 3.8 — all matched sides")
+    st.subheader("Price discovery 3.9 — best outcome routes and quote quality")
     st.caption("Cached quotes only. One-share fee estimate; max entry is theoretical, not an available order-book price. No extra sportsbook requests.")
-    price_table = price_discovery(st.session_state.get("quick_comparisons"))
+    price_table = price_discovery(st.session_state.get("quick_comparisons"), st.session_state.get("quick_route_depth"))
     if price_table.empty:
         st.info("No eligible exact matched sides to price.")
     else:
@@ -126,7 +126,10 @@ if "quick_results" in st.session_state:
         pc1.metric("Compared sides", len(price_table))
         pc2.metric("Closest net edge", f"{closest['net_edge_pp_1share']:+.2f}pp")
         pc3.metric("Gap to +5pp", f"{closest['gap_to_threshold_pp']:.2f}pp")
-        with st.expander("All prices ranked — threshold distance, book disagreement, CSV", expanded=True):
+        best_prices = price_table[price_table["best_route_for_outcome"]].copy()
+        st.caption(f"{len(best_prices)} distinct winning outcomes from {len(price_table)} contract-side routes. Order-book snapshots cover only selected outcomes; all others remain uninspected.")
+        st.dataframe(best_prices, hide_index=True, use_container_width=True)
+        with st.expander("All YES/NO routes — threshold distance, book quality, depth, CSV", expanded=False):
             st.caption("A smaller gap is not approval. Wide sportsbook disagreement and old quotes weaken confidence; verify contract fees, depth, kickoff and settlement separately.")
             st.dataframe(price_table, hide_index=True, use_container_width=True)
             st.download_button("Download price discovery CSV",
