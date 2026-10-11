@@ -196,6 +196,31 @@ class ExitDepthTests(unittest.TestCase):
         self.assertFalse(okay)
         self.assertIn("quantity changed", msg)
 
+    def test_fractional_public_depth_floors_each_price_level(self):
+        # Kalshi FP orderbooks may contain decimal contract quantities.
+        # Only whole contracts are counted; never round fractional orders up.
+        book = {"yes_bids": [[80, 2.9], [79, 0.75], [78, 1.5]],
+                "no_bids": [[99, 200]]}
+        bids = _bid_levels(book, "YES")
+        self.assertEqual([(float(p), q) for p, q in bids],
+                         [(80.0, 2), (78.0, 1)])
+        response = estimate_exit(self.position, self.market, book,
+                                 requested_shares=4, observed_at=self.now)
+        self.assertEqual(response["covered_shares"], 3)
+        self.assertFalse(response["depth_complete"])
+        self.assertAlmostEqual(response["gross_proceeds_usd"], 2.38)
+        self.assertIn("ONLY 3/4", response["reason"])
+        self.assertFalse(response["execution_verified"])
+
+    def test_fractional_orders_do_not_combine_across_levels(self):
+        book = {"yes_bids": [[80, 0.9], [79, 0.9], [78, 0.9]],
+                "no_bids": [[99, 100]]}
+        response = estimate_exit(self.position, self.market, book,
+                                 requested_shares=1, observed_at=self.now)
+        self.assertEqual(response["covered_shares"], 0)
+        self.assertIsNone(response["gross_proceeds_usd"])
+        self.assertIn("No resting bids", response["reason"])
+
     def test_sort_and_aggregate_bid_levels_descending(self):
         r = _bid_levels({"yes_bids": [[50, 2], [60, 2], [60, 3]],
                          "no_bids": []}, "YES")
