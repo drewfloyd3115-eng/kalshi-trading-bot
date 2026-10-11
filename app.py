@@ -29,6 +29,14 @@ from scanner import fetch_sports_markets, fetch_orderbook
 from sports_ui import (PAGES, add_styles, header, navigation, home_overview, opportunities_page,
                        detail_page, portfolio_page)
 
+def sportsbook_api_key():
+    """Offline research pages must load without a configured sportsbook secret."""
+    try:
+        return st.secrets.get("ODDS_API_KEY", "")
+    except FileNotFoundError:
+        return ""
+
+
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 add_styles()
 header()
@@ -48,7 +56,7 @@ if page == "Home":
         quick_exposure = st.number_input("Other open exposure ($)", min_value=0.0, value=0.0, key="quick_exposure")
         st.caption("Position limit: 1% of bankroll; total exposure limit: 3%. Settings do not make any API requests.")
     if st.button("Scan Now — paper only", type="primary", key="quick_scan", use_container_width=True):
-        api_key = st.secrets.get("ODDS_API_KEY", "")
+        api_key = sportsbook_api_key()
         if not api_key:
             st.error("Add ODDS_API_KEY to Streamlit Secrets.")
         else:
@@ -524,7 +532,7 @@ else:
     with odds_tab:
         st.subheader("Free-tier sportsbook odds")
         st.caption("The Odds API: independent US sportsbook moneylines. Fetch only when requested to conserve free credits.")
-        key = st.secrets.get("ODDS_API_KEY", "")
+        key = sportsbook_api_key()
         if not key:
             st.warning("Outside odds are not connected. Add ODDS_API_KEY in Streamlit app settings → Secrets. Never put the key in GitHub or chat.")
         odds_league = st.selectbox("League", ["CFB", "NFL"], key="odds_league")
