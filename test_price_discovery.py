@@ -30,6 +30,22 @@ class PriceDiscoveryTests(unittest.TestCase):
         self.assertEqual(result.iloc[0]["depth_status"], "Below 5pp threshold")
         self.assertEqual(result.iloc[0]["quote_quality"], "REVIEW — disagreement")
 
+    def test_best_equivalent_route_maximizes_edge_above_threshold(self):
+        data = pd.DataFrame([
+            {"event": "A vs B", "outcome_team": "A", "ticker": "expensive",
+             "side": "YES", "fair_pct": 62, "ask_cents": 54,
+             "book_spread_pp": 1, "books": 3},
+            {"event": "A vs B", "outcome_team": "A", "ticker": "cheaper",
+             "side": "NO", "fair_pct": 62, "ask_cents": 53,
+             "book_spread_pp": 1, "books": 3},
+        ])
+        result = price_discovery(data)
+        best = result[result["best_route_for_outcome"]]
+        self.assertEqual(len(best), 1)
+        self.assertEqual(best.iloc[0]["ticker"], "cheaper")
+        self.assertGreater(best.iloc[0]["net_edge_pp_1share"],
+                           result[result["ticker"] == "expensive"].iloc[0]["net_edge_pp_1share"])
+
     def test_invalid_prices_excluded(self):
         data = pd.DataFrame([{"fair_pct": 60, "ask_cents": 0}])
         self.assertTrue(price_discovery(data).empty)
