@@ -12,9 +12,9 @@ COLUMNS = ["event", "outcome_team", "ticker", "side", "previous_edge_pp",
 def scan_changes(previous, current, eligibility, previous_time=None, current_time=None, now=None):
     now = now or datetime.now(timezone.utc)
     prev_at, curr_at = parse_time(previous_time), parse_time(current_time)
-    independent = bool(prev_at and curr_at and curr_at > prev_at)
+    independent = bool(prev_at and curr_at and curr_at > prev_at and prev_at <= now and curr_at <= now + pd.Timedelta(minutes=2))
     fresh = bool(curr_at and -120 <= (now - curr_at).total_seconds() <= 300)
-    if current is None or current.empty:
+    if not isinstance(current, pd.DataFrame) or current.empty:
         return pd.DataFrame(columns=COLUMNS)
     before = {}
     if isinstance(previous, pd.DataFrame) and not previous.empty:
@@ -27,7 +27,7 @@ def scan_changes(previous, current, eligibility, previous_time=None, current_tim
     rows = []
     for _, r in current.iterrows():
         key = (str(r.get("ticker")), str(r.get("side")))
-        prior = before.get(key)
+        prior = before.get(key) if independent else None
         evidence = statuses.get(key)
         edge = pd.to_numeric(r.get("net_edge_pp_1share"), errors="coerce")
         ask = pd.to_numeric(r.get("ask_cents"), errors="coerce")
@@ -36,8 +36,8 @@ def scan_changes(previous, current, eligibility, previous_time=None, current_tim
         kickoff = str(evidence.get("kickoff_status", "UNKNOWN")) if evidence is not None else "UNKNOWN"
         quote = str(evidence.get("quote_status", "UNVERIFIED")) if evidence is not None else "UNVERIFIED"
         kickoff_at = parse_time(evidence.get("kickoff_utc")) if evidence is not None else None
-        eligible = bool(fresh and kickoff_at and kickoff_at > now and quote == "CACHED RECENT")
-        crossed = bool(independent and pd.notna(old_edge) and pd.notna(edge) and old_edge < MIN_EDGE_PP <= edge)
+        eligible = bool(independent and fresh and kickoff_at and kickoff_at > now and quote == "CACHED RECENT")
+        crossed = bool(eligible and pd.notna(old_edge) and pd.notna(edge) and old_edge < MIN_EDGE_PP <= edge)
         rows.append({
             "event": r.get("event"), "outcome_team": r.get("outcome_team"),
             "ticker": key[0], "side": key[1],
