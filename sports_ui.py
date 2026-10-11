@@ -57,6 +57,8 @@ def opportunity_view(matches, odds=None, scan_time=None, depth=None, now=None):
 
 def research_label(row):
     """Conservative user-facing status independent of nominal +EV estimates."""
+    if str(row.get("research_status")) == "DESIGN PREVIEW":
+        return "DESIGN PREVIEW — no market data"
     if str(row.get("research_status")) != "REVIEW ONLY — NOT APPROVED":
         return "BLOCKED — no trade"
     edge = pd.to_numeric(row.get("net_edge_pp_1share"), errors="coerce")
@@ -181,6 +183,7 @@ div.stButton > button[kind="primary"]:hover {background:#086bd2; color:white;}
 }
 .kl-opp-flag.review {border-color:#b3832f;background:#37290d;color:#ffd58d;}
 .kl-opp-flag.blocked {border-color:#805361;background:#321d29;color:#ffb3bd;}
+.kl-opp-flag.preview {border-color:#386f99;background:#0d3049;color:#9ddaff;}
 .kl-opp-figures {
     display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
     gap:7px; margin:3px 0 10px;
@@ -324,7 +327,7 @@ def opportunity_card_html(row):
     estimated_edge = pd.to_numeric(row.get("net_edge_pp_1share"), errors="coerce")
     edge_text = f"{float(estimated_edge):+.2f}pp" if pd.notna(estimated_edge) else "—"
     status = research_label(row)
-    flagged = "review" if status.startswith("PRELIMINARY") else "blocked"
+    flagged = "preview" if status.startswith("DESIGN PREVIEW") else ("review" if status.startswith("PRELIMINARY") else "blocked")
     ask = _display_number(row.get("ask_cents"), 1, "¢")
     fair = _display_number(row.get("fair_pct"), 1, "%")
     books = _display_number(row.get("books"), 0)
@@ -362,20 +365,18 @@ def opportunities_page():
   <div class="kl-opp-descr">Ranked winning outcomes, estimated edges and safety checks.
   No recommendations or executable orders.</div>
 </div>""", unsafe_allow_html=True)
-    age, fresh = scan_age_label(meta.get("time") if isinstance(meta, dict) else None)
-    if fresh:
-        st.caption("◷ " + age + " · Cached sportsbook comparisons — no API request")
-    else:
-        st.warning(age + ". All quotes are historical; rerunning this view does not refresh them.")
+    if meta:
+        age, fresh = scan_age_label(meta.get("time"))
+        if fresh:
+            st.caption("◷ " + age + " · Cached sportsbook comparisons — no API request")
+        else:
+            st.warning(age + ". Cached prices cannot be used as current trade quotes.")
     if data.empty:
-        st.info("No cached matched markets. Return to Home to run a manual CFB or NFL paper scan when ready.")
-        st.markdown("""
-<div class="kl-opp-empty"><strong>Market cards appear here after a scan.</strong>
-<br>Each card will show an indicative price, estimated probability,
-net edge, quote quality, and exactly why the outcome is blocked or under review.
-No demonstration trades or made-up prices are displayed.</div>
-""", unsafe_allow_html=True)
-        st.caption("Layout preview — placeholders only, not a Kalshi contract")
+        if meta:
+            st.info("No exact matched winning outcomes in this scan. The card below is a layout preview only.")
+        else:
+            st.info("No scan saved in this session. This is a design preview, not a market opportunity.")
+        st.caption("Card preview · placeholders only · no API credits used")
         preview = {
             "event": "Upcoming matchup placeholder",
             "outcome_team": "No outcome loaded",
@@ -383,7 +384,7 @@ No demonstration trades or made-up prices are displayed.</div>
             "ask_cents": None, "fair_pct": None,
             "net_edge_pp_1share": None, "books": None,
             "book_spread_pp": None, "oldest_quote_minutes": None,
-            "depth_status": "NOT INSPECTED", "research_status": "BLOCKED",
+            "depth_status": "NOT INSPECTED", "research_status": "DESIGN PREVIEW",
             "reason": "DESIGN PREVIEW ONLY — no odds, no verified trade"
         }
         st.markdown(opportunity_card_html(preview), unsafe_allow_html=True)
