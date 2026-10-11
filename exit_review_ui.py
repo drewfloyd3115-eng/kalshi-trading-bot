@@ -112,7 +112,10 @@ def render_exit_review(ledger):
     held = int(row["remaining_shares"])
     max_qty = min(held, MAX_REVIEW_SHARES)
     # Prevent old quantity state exceeding limits after switching positions.
-    if st.session_state.get("exit_review_position_last") != selected:
+    current_qty = st.session_state.get("exit_review_shares", max_qty)
+    if (st.session_state.get("exit_review_position_last") != selected
+            or not isinstance(current_qty, int)
+            or not 1 <= current_qty <= max_qty):
         st.session_state["exit_review_position_last"] = selected
         st.session_state["exit_review_shares"] = max_qty
     qty = st.number_input("Number of held shares to inspect for a hypothetical sale",
