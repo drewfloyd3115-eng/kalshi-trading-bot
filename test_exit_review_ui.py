@@ -38,7 +38,7 @@ class ExitReviewCardTests(unittest.TestCase):
         # No manual positions in empty session. Merely opening Exit Review
         # must never make network requests to public Kalshi or sportsbook.
         from streamlit.testing.v1 import AppTest
-        with patch("exit_review_ui.review_public_position",
+        with patch("requests.get",
                    side_effect=AssertionError("Background public GET not allowed")):
             app = AppTest.from_file("app.py", default_timeout=20).run()
             self.assertFalse(app.exception, str(app.exception))
