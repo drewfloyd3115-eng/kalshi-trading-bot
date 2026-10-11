@@ -10,6 +10,7 @@ from matcher import compare, parse_time
 from team_names import normalized
 from diagnostics import diagnostics
 from coverage_funnel import coverage_funnel
+from discovery_report import discovery_report
 from event_audit import audit
 from equivalent_routes import equivalent_routes
 from route_depth import review_routes
@@ -25,7 +26,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 3.6 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 3.7 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -93,6 +94,26 @@ if "quick_results" in st.session_state:
     a.metric("Kalshi markets", summary["markets"])
     b.metric("Sportsbook rows", summary["sportsbook_rows"])
     c.metric("Matched sides", summary["matched"])
+    st.subheader("Opportunity discovery — coverage audit")
+    st.caption("Uses this scan's cached Kalshi markets and sportsbook quotes. No additional Odds API requests.")
+    coverage_metrics, coverage_table = discovery_report(
+        st.session_state.get("quick_markets_cache"),
+        st.session_state.get("quick_odds_cache"),
+        st.session_state.get("quick_funnel"),
+        st.session_state.get("quick_comparisons"))
+    d1, d2, d3 = st.columns(3)
+    d1.metric("Matched games", coverage_metrics["matched_games"])
+    d2.metric("Unmatched candidates", coverage_metrics["candidate_games"])
+    d3.metric("No exact event", coverage_metrics["excluded_games"])
+    with st.expander("Why games were missed — download coverage CSV"):
+        st.caption("Candidates are diagnostic only. Never assume a similar team name or listed market is a valid match.")
+        if coverage_table.empty:
+            st.info("No coverage data for this scan.")
+        else:
+            st.dataframe(coverage_table, hide_index=True, use_container_width=True)
+            st.download_button("Download coverage audit CSV",
+                coverage_table.to_csv(index=False).encode("utf-8"),
+                file_name="kalshi_coverage_audit.csv", mime="text/csv")
     st.subheader("Opportunity dashboard — research only")
     st.caption("Top five preliminary matches. Cached data only; no extra sportsbook requests.")
     eligibility = eligibility_dashboard(st.session_state.get("quick_comparisons"), st.session_state.get("quick_odds_cache"), summary.get("time"))
