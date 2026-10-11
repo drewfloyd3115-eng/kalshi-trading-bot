@@ -29,7 +29,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 4.3.1 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Release candidate 1 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -128,6 +128,38 @@ if "quick_results" in st.session_state:
     a.metric("Kalshi markets", summary["markets"])
     b.metric("Sportsbook rows", summary["sportsbook_rows"])
     c.metric("Matched sides", summary["matched"])
+    # Single mobile-first research decision panel. Re-evaluate on every rerun.
+    st.subheader("Scan decision — paper research only")
+    latest_eligibility = eligibility_dashboard(
+        st.session_state.get("quick_comparisons"),
+        st.session_state.get("quick_odds_cache"), summary.get("time"))
+    latest_prices = price_discovery(st.session_state.get("quick_comparisons"),
+                                    st.session_state.get("quick_route_depth"))
+    unique_outcomes = (latest_prices[latest_prices["best_route_for_outcome"]]
+                       if not latest_prices.empty else pd.DataFrame())
+    review_count = (int((latest_eligibility["research_status"] != "BLOCKED").sum())
+                    if not latest_eligibility.empty else 0)
+    passing_count = (int((pd.to_numeric(latest_eligibility["net_edge_pp_1share"],
+                                       errors="coerce") >= 5).sum())
+                     if not latest_eligibility.empty else 0)
+    st.error("NO VERIFIED TRADE — research estimates are not executable orders.")
+    summary_a, summary_b, summary_c = st.columns(3)
+    summary_a.metric("Distinct outcomes", len(unique_outcomes))
+    summary_b.metric("Preliminary +5pp sides", passing_count)
+    summary_c.metric("Pregame review sides", review_count)
+    if latest_eligibility.empty:
+        st.caption("No exact matched pregame contracts with sufficient sportsbook evidence.")
+    else:
+        reasons = latest_eligibility["reason"].fillna("").astype(str)
+        kickoff_blocked = int(reasons.str.contains("kickoff", case=False).sum())
+        quote_blocked = int(reasons.str.contains("scan|quote|book", case=False).sum())
+        st.caption(f"Safety checks: {kickoff_blocked} sides lack a verified future kickoff; "
+                   f"{quote_blocked} have quote or scan-quality concerns. "
+                   "Settlement terms, live executable depth, and complete fees remain unverified.")
+        with st.expander("Why each contract is blocked or under review"):
+            st.dataframe(latest_eligibility, hide_index=True, use_container_width=True)
+    st.caption("The dashboard recalculates eligibility from cached data whenever the page reruns. "
+               "Viewing it does not use Odds API credits.")
     st.subheader("Opportunity discovery — coverage audit")
     st.caption("Uses this scan's cached Kalshi markets and sportsbook quotes. No additional Odds API requests.")
     coverage_metrics, coverage_table = discovery_report(
