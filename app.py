@@ -26,6 +26,7 @@ from contract_validation import validate_contract
 from inspection_diagnostics import explain
 from pregame_dashboard import eligibility_dashboard
 from scanner import fetch_sports_markets, fetch_orderbook
+from position_ledger import empty_ledger, validate_ledger, ledger_summary
 # Streamlit reruns app.py but can retain previously-imported helper modules
 # in the same Python worker after a GitHub deployment. Refresh presentation
 # functions explicitly so UI version labels and screens cannot diverge.
@@ -49,7 +50,7 @@ def sportsbook_api_key():
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 add_styles()
 header()
-st.caption("Sports UI preview 1.9 · Paper research only · Live trading disabled.")
+st.caption("Sports UI preview 2.0 · Manual paper-position ledger · Live trading disabled.")
 
 # Streamlit's native pills wrap on mobile; st.columns always stack at phone width.
 # One single-select widget controls every view without CSS-dependent navigation.
@@ -63,6 +64,25 @@ if "queue" not in st.session_state:
     st.session_state.queue = []
 if "paper_exposure" not in st.session_state:
     st.session_state.paper_exposure = 0.0
+
+# A manual paper fill is a position, unlike an approval queue item.
+# Count both against all existing entry/scanner risk limits.
+if "position_ledger" not in st.session_state:
+    st.session_state.position_ledger = empty_ledger()
+try:
+    st.session_state.position_ledger = validate_ledger(st.session_state.position_ledger)
+except ValueError:
+    st.error("Invalid paper position ledger. Import a valid backup before evaluating trades.")
+    st.stop()
+
+
+def manual_position_exposure():
+    return ledger_summary(st.session_state.position_ledger)["open_cost_usd"]
+
+
+def total_research_exposure(other=0.0):
+    return float(other) + float(st.session_state.paper_exposure) + manual_position_exposure()
+
 
 if page == "Home":
     st.subheader("One-tap CFB / NFL paper scan")
@@ -103,10 +123,10 @@ if page == "Home":
                 st.session_state.paper_scan_journal = journal_rows(quick_matches, quick_league, st.session_state.quick_results["time"])
                 st.session_state.quick_routes = equivalent_routes(quick_matches)
                 st.session_state.quick_fee_analysis = fee_analysis(quick_matches)
-                st.session_state.quick_route_depth = review_routes(quick_matches, quick_bankroll, quick_exposure + st.session_state.paper_exposure)
+                st.session_state.quick_route_depth = review_routes(quick_matches, quick_bankroll, total_research_exposure(quick_exposure))
                 st.session_state.quick_depth = scan_candidates(
                     quick_matches, quick_bankroll,
-                    quick_exposure + st.session_state.paper_exposure)
+                    total_research_exposure(quick_exposure))
                 # Commit history only after the complete scan succeeds, separately per league.
                 snapshots = st.session_state.setdefault("completed_scan_snapshots", {})
                 old = snapshots.get(quick_league)
@@ -600,7 +620,7 @@ else:
                         st.warning("NO TRADE: market or sportsbook snapshots are older than 5 minutes. Refresh both and rerun comparison.")
                     else:
                         results = scan_candidates(st.session_state.matched, scan_bankroll,
-                                                  scan_exposure + st.session_state.paper_exposure)
+                                                  total_research_exposure(scan_exposure))
                         if results.empty:
                             st.info("NO TRADE: no preliminary match clears +5pp to warrant liquidity lookup.")
                         else:
@@ -642,7 +662,7 @@ else:
                 fy, fn = no_vig(yes_odds, no_odds)
                 st.write(f"No-vig fair probability: YES {fy:.1%} / NO {fn:.1%}")
                 results = assess(yes_odds, no_odds, yes_ask, no_ask, edge_bankroll,
-                                 edge_exposure + st.session_state.paper_exposure,
+                                 total_research_exposure(edge_exposure),
                                  fee_multiplier, yes_depth, no_depth)
                 st.dataframe(pd.DataFrame(results), hide_index=True, use_container_width=True)
                 st.info("PAPER CANDIDATE is conditional, not BUY. Recheck all inputs immediately before acting.")
@@ -660,7 +680,7 @@ else:
         bankroll = st.number_input("Paper bankroll ($)", min_value=1.0, value=DEFAULT_BANKROLL, step=50.0)
         existing = st.number_input("Other open paper exposure ($)", min_value=0.0, value=0.0, step=1.0)
         if st.button("Evaluate trade"):
-            result = evaluate(side, fair_pct / 100, ask_cents / 100, fee, int(contracts), bankroll, existing + st.session_state.paper_exposure)
+            result = evaluate(side, fair_pct / 100, ask_cents / 100, fee, int(contracts), bankroll, total_research_exposure(existing))
             st.metric("Net edge (percentage points)", f"{result['edge_pp']:+.2f}")
             st.metric("Estimated cost", f"${result['cost']:.2f}")
             st.write(result["status"])
