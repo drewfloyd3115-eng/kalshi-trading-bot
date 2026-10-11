@@ -375,6 +375,18 @@ def opportunities_page():
 net edge, quote quality, and exactly why the outcome is blocked or under review.
 No demonstration trades or made-up prices are displayed.</div>
 """, unsafe_allow_html=True)
+        st.caption("Layout preview — placeholders only, not a Kalshi contract")
+        preview = {
+            "event": "Upcoming matchup placeholder",
+            "outcome_team": "No outcome loaded",
+            "league": "CFB / NFL", "side": "—",
+            "ask_cents": None, "fair_pct": None,
+            "net_edge_pp_1share": None, "books": None,
+            "book_spread_pp": None, "oldest_quote_minutes": None,
+            "depth_status": "NOT INSPECTED", "research_status": "BLOCKED",
+            "reason": "DESIGN PREVIEW ONLY — no odds, no verified trade"
+        }
+        st.markdown(opportunity_card_html(preview), unsafe_allow_html=True)
         return
 
     total = len(data)
