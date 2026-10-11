@@ -31,6 +31,20 @@ class MonitorTests(unittest.TestCase):
         self.assertFalse(bool(result.iloc[0]["independent_scans"]))
         self.assertEqual(result.iloc[0]["threshold_crossing"], "NO")
 
+    def test_missing_timestamp_never_displays_historical_comparison(self):
+        result = scan_changes(self.old, self.new, None)
+        self.assertTrue(pd.isna(result.iloc[0]["previous_ask_cents"]))
+        self.assertEqual(result.iloc[0]["threshold_crossing"], "NO")
+
+    def test_stale_scan_blocks_crossing(self):
+        now = datetime(2026, 10, 10, 20, 0, tzinfo=timezone.utc)
+        evidence = pd.DataFrame([{"ticker":"T","side":"YES","kickoff_utc":(now+timedelta(hours=2)).isoformat(),"quote_status":"CACHED RECENT"}])
+        result = scan_changes(self.old, self.new, evidence,
+                              (now-timedelta(minutes=20)).isoformat(),
+                              (now-timedelta(minutes=10)).isoformat(), now=now)
+        self.assertEqual(result.iloc[0]["threshold_crossing"], "NO")
+        self.assertTrue(result.iloc[0]["research_status"].startswith("BLOCKED"))
+
     def test_first_scan_has_no_false_crossing(self):
         result = scan_changes(None, self.new, None)
         self.assertEqual(result.iloc[0]["threshold_crossing"], "NO")
