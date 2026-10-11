@@ -24,8 +24,10 @@ def diagnostics(markets, odds, now=None):
             parts = re.split(r"\s+(?:vs\.?|versus|at|@)\s+", str(m.get("event", "")), flags=re.I)
             if len(parts) == 2 and a and b and a != b and {normalized(x) for x in parts} == {a, b}:
                 found.append(m)
-        if not start or start <= now:
-            reason = "Game already started or missing kickoff"
+        if not start:
+            reason = "KICKOFF MISSING — sportsbook start unavailable or invalid"
+        elif start <= now:
+            reason = "KICKOFF PASSED — game is not eligible for pregame matching"
         elif fresh < 2:
             reason = "Fewer than 2 recently updated sportsbook rows"
         elif not found:
@@ -34,5 +36,7 @@ def diagnostics(markets, odds, now=None):
             reason = "Event candidate found; outcome/pricing or other validation may reject"
         rows.append({"league": league, "game": str(away)+" @ "+str(home),
                      "sportsbook_rows": len(group), "fresh_rows": fresh,
-                     "kalshi_event_candidates": len(found), "reason": reason})
+                     "kalshi_event_candidates": len(found), "reason": reason,
+                     "kickoff_utc": start.isoformat() if start else "",
+                     "pregame_timing": ("UNKNOWN" if not start else ("PASSED" if start <= now else "FUTURE"))})
     return pd.DataFrame(rows).sort_values(["kalshi_event_candidates","sportsbook_rows"],ascending=[True,False])
