@@ -78,13 +78,18 @@ def _bid_levels(book, side):
         except (InvalidOperation, ValueError):
             raise ValueError("Malformed bid price or quantity") from None
         if not price.is_finite() or not count.is_finite() \
-                or price <= 0 or price >= 100 or count <= 0 \
-                or count != count.to_integral_value():
+                or price <= 0 or price >= 100 or count <= 0:
             raise ValueError("Invalid held-side bid price or quantity")
-        # A market may expose fractional cents; round proceeds only at totals.
+        # Kalshi fixed-point order books may contain fractional contract counts.
+        # Our paper ledger uses WHOLE shares only: floor each resting level
+        # separately. Never round up or pool sub-shares into a fake whole order.
+        # This is conservative and does not certify live execution.
         if price.as_tuple().exponent < -4:
             raise ValueError("Unsupported bid precision")
-        levels[price] = levels.get(price, 0) + int(count)
+        whole_shares = int(count)
+        if whole_shares == 0:
+            continue
+        levels[price] = levels.get(price, 0) + whole_shares
     return [(price, count) for price, count in sorted(levels.items(), reverse=True)]
 
 
