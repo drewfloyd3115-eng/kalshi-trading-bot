@@ -10,6 +10,7 @@ from edge_engine import taker_fee
 from pregame_dashboard import eligibility_dashboard
 from price_discovery import price_discovery
 from paper_history import summary as paper_summary, HISTORY_COLUMNS
+from position_ledger import ledger_summary, empty_ledger
 
 
 PAGES = ["Home", "Opportunities", "Market Detail", "Portfolio", "Research"]
@@ -296,10 +297,13 @@ def _cached_data():
 def home_overview(bankroll, extra_exposure):
     meta, opportunities = _cached_data()
     st.markdown("### Game-day research dashboard")
-    exposure = float(st.session_state.get("paper_exposure", 0)) + float(extra_exposure)
+    manual_cost = ledger_summary(
+        st.session_state.get("position_ledger", empty_ledger()))["open_cost_usd"]
+    exposure = (float(st.session_state.get("paper_exposure", 0))
+                + float(extra_exposure) + manual_cost)
     a, b, c = st.columns(3)
     a.metric("Paper bankroll", f"${bankroll:,.2f}")
-    b.metric("Open paper exposure", f"${exposure:,.2f}")
+    b.metric("Paper exposure incl. ledger", f"${exposure:,.2f}")
     c.metric("Distinct outcomes", len(opportunities))
     if not meta:
         st.info("No scan in this session. Select CFB or NFL and use Scan Now. Only that action requests sportsbook odds.")
