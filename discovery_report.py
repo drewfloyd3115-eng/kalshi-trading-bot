@@ -25,10 +25,15 @@ def discovery_report(markets, odds, funnel, comparisons):
             return "CANDIDATE — UNMATCHED"
         return "NO EXACT EVENT"
     data["coverage_stage"] = data.apply(category, axis=1)
+    if "pregame_timing" not in data.columns:
+        data["pregame_timing"] = "UNKNOWN"
+    data["pregame_timing"] = data["pregame_timing"].fillna("UNKNOWN")
     data["next_check"] = data.apply(lambda r:
-        "Matched; check estimated edge and independent verification" if r["coverage_stage"] == "MATCHED"
-        else ("Inspect outcome labels, event date, kickoff and quote validity" if r["coverage_stage"] == "CANDIDATE — UNMATCHED"
-              else "Check market availability and exact team aliases; do not force-match"), axis=1)
+        "Game already started; pregame evaluation prohibited" if r["pregame_timing"] == "PASSED"
+        else ("Independent kickoff missing; exclude until verified" if r["pregame_timing"] == "UNKNOWN"
+        else ("Matched; check estimated edge and independent verification" if r["coverage_stage"] == "MATCHED"
+        else ("Inspect outcome labels, ticker date, pricing and quote validity" if r["coverage_stage"] == "CANDIDATE — UNMATCHED"
+        else "Check market availability and exact team aliases; do not force-match"))), axis=1)
     priority = {"CANDIDATE — UNMATCHED": 0, "NO EXACT EVENT": 1, "MATCHED": 2}
     data["_priority"] = data["coverage_stage"].map(priority)
     data = data.sort_values(["_priority", "fresh_rows"], ascending=[True, False]).drop(columns="_priority")
