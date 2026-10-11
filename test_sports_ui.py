@@ -76,6 +76,19 @@ class SportsUITests(unittest.TestCase):
 
 
 class SportsUIAppSmokeTests(unittest.TestCase):
+    def test_new_opportunities_markup_and_placeholder_are_rendered(self):
+        """Catch stale presentation modules that render an obsolete UI."""
+        from streamlit.testing.v1 import AppTest
+        at = AppTest.from_file("app.py", default_timeout=20).run()
+        self.assertFalse(at.exception, str(at.exception))
+        at.button_group(key="sports_nav").set_value("Opportunities").run()
+        self.assertFalse(at.exception, str(at.exception))
+        markdown = "\n".join(str(item.value) for item in at.markdown)
+        self.assertIn("Market research / CFB + NFL", markdown)
+        self.assertIn("Upcoming matchup placeholder", markdown)
+        self.assertIn("DESIGN PREVIEW ONLY", markdown)
+        self.assertNotIn("Ranked by estimated net edge. One best YES/NO route per distinct", markdown)
+
     def test_main_pages_load_without_fetching_odds(self):
         from streamlit.testing.v1 import AppTest
         at = AppTest.from_file("app.py", default_timeout=20).run()
