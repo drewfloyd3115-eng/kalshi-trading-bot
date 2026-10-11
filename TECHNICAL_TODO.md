@@ -31,9 +31,9 @@ Personal-use CFB/NFL research and **paper-trading** roadmap. This is a technical
 
 - [ ] Open paper position can show an actionable *research review* while new-buy opportunities = **0**.
 - [ ] Wrong-side ask, stale quotes, no executable bid or insufficient depth **never** trigger a verified profit-taking opportunity.
-- [ ] P&L correctly accounts for entry/exit fees, quantity, partial exits, and remaining exposure.
+- [x] Manual hypothetical P&L correctly accounts for entered entry/exit fees, quantity, partial exits, and remaining cost exposure (offline ledger regression tests). Actual market-specific fees remain unverified.
 - [ ] Live/in-play scenarios block hold-value calculations when an independently updated probability estimate is unavailable.
-- [ ] A valid paper exit record survives backup/export/import and doesn't double-count proceeds.
+- [x] Manual paper exit transactions survive CSV export/import with stable transaction IDs; duplicate transactions and over-selling are rejected.
 - [ ] Phone UI makes **Positions / Exit Review** visible from the Portfolio without obscuring the main Scan Now workflow.
 - [ ] All offline regression tests pass; manually verify one end-to-end paper position and exit before relying on the feature.
 
