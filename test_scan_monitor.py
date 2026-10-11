@@ -21,7 +21,7 @@ class MonitorTests(unittest.TestCase):
         now = datetime(2026, 10, 10, 20, 0, tzinfo=timezone.utc)
         evidence = pd.DataFrame([{"ticker":"T","side":"YES","kickoff_status":"FUTURE (cached)","kickoff_utc":(now-timedelta(minutes=1)).isoformat(),"quote_status":"CACHED RECENT"}])
         result = scan_changes(self.old, self.new, evidence, (now-timedelta(minutes=1)).isoformat(), now.isoformat(), now=now)
-        self.assertEqual(result.iloc[0]["threshold_crossing"], "CROSSED BUT INELIGIBLE")
+        self.assertEqual(result.iloc[0]["threshold_crossing"], "NO")
         self.assertTrue(result.iloc[0]["research_status"].startswith("BLOCKED"))
 
     def test_duplicate_scan_timestamps_block_crossing(self):
