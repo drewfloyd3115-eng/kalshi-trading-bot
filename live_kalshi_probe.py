@@ -101,12 +101,18 @@ def run_probe(*, market_source=fetch_sports_markets,
             }
             result = estimate_exit(position, metadata, book,
                                    requested_shares=1, observed_at=checked)
-            # The public schema and end-to-end depth calculations reached live
-            # Kalshi data. This DOES NOT verify quote freshness or execution.
+            held_bids = book.get("yes_bids" if candidate["side"] == "YES" else "no_bids", [])
+            # Actual public bid quantities can be fractional or use a different
+            # response schema. Only show a bounded public diagnostic sample.
+            # INVALID is a failing integration state, never 'empty but verified'.
+            invalid_depth = "Invalid" in result["reason"] or "Malformed" in result["reason"]
+            status = ("READ_ONLY_BOOK_INVALID — NO EXIT SIGNAL" if invalid_depth
+                      else "READ_ONLY_BOOK_PARSED — NO EXIT SIGNAL"
+                      if result["covered_shares"] == 1
+                      else "READ_ONLY_BOOK_EMPTY — NO EXIT SIGNAL")
             report.update({
-                "status": ("READ_ONLY_BOOK_PARSED — NO EXIT SIGNAL"
-                           if result["covered_shares"] == 1
-                           else "READ_ONLY_BOOK_EMPTY — NO EXIT SIGNAL"),
+                "status": status,
+                "public_held_bid_sample": held_bids[:5],
                 "ticker": ticker, "league": candidate["league"],
                 "side": candidate["side"],
                 "market_status": result["market_status"],
@@ -142,7 +148,10 @@ def main():
         }, indent=2))
         return 2
     print(json.dumps(result, indent=2, default=str))
-    return 0 if result["status"].startswith("READ_ONLY_BOOK_") else 2
+    return 0 if result["status"] in (
+        "READ_ONLY_BOOK_PARSED — NO EXIT SIGNAL",
+        "READ_ONLY_BOOK_EMPTY — NO EXIT SIGNAL",
+    ) else 2
 
 
 if __name__ == "__main__":
