@@ -40,36 +40,16 @@ def sportsbook_api_key():
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 add_styles()
 header()
-st.caption("Sports UI preview 1.3.1 · Paper research only · Live trading disabled.")
+st.caption("Sports UI preview 1.4 · Paper research only · Live trading disabled.")
 
-# Keep essential mobile navigation in the entrypoint itself. This prevents a
-# stale secondary module during Streamlit Cloud hot deployment from hiding pages.
-def _set_navigation(destination):
-    st.session_state["sports_nav"] = destination
+# Streamlit's native pills wrap on mobile; st.columns always stack at phone width.
+# One single-select widget controls every view without CSS-dependent navigation.
+# This never fetches odds or places orders.
+if st.session_state.get("sports_nav") not in PAGES:
+    st.session_state["sports_nav"] = "Home"
+page = st.pills("Navigate", PAGES, selection_mode="single", default="Home",
+                key="sports_nav", label_visibility="collapsed") or "Home"
 
-
-def _render_navigation():
-    if st.session_state.get("sports_nav") not in PAGES:
-        st.session_state["sports_nav"] = "Home"
-    nav_rows = (
-        (("Home", "nav_home"), ("Opportunities", "nav_opportunities"),
-         ("Market Detail", "nav_market_detail")),
-        (("Portfolio", "nav_portfolio"), ("Research", "nav_research")),
-    )
-    # Give CSS one uniquely scoped container. Streamlit otherwise stacks
-    # columns full-width at mobile breakpoints, obscuring the Scan Now control.
-    with st.container(key="sports_navigation_grid"):
-        for items in nav_rows:
-            columns = st.columns(len(items), gap="small")
-            for col, (destination, key) in zip(columns, items):
-                with col:
-                    st.button(destination, key=key, use_container_width=True,
-                              type=("primary" if st.session_state["sports_nav"] == destination else "secondary"),
-                              on_click=_set_navigation, args=(destination,))
-    return st.session_state["sports_nav"]
-
-
-page = _render_navigation()
 if "queue" not in st.session_state:
     st.session_state.queue = []
 if "paper_exposure" not in st.session_state:
