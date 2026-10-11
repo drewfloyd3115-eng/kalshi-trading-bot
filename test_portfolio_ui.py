@@ -77,6 +77,11 @@ class PortfolioAppTests(unittest.TestCase):
 
         nav = at.button_group(key="sports_portfolio_area")
         self.assertEqual(len(nav.options), 4)
+        at.button_group(key="sports_portfolio_area").set_value("Open paper fills").run()
+        self.assertFalse(at.exception, str(at.exception))
+        # Manual ledger is the primary view; legacy records remain separately labeled.
+        expanders = [str(x.label) for x in at.expander]
+        self.assertIn("Older imported paper-journal fills (separate records)", expanders)
         for page in ("Open paper fills", "History", "Exit review", "Overview"):
             at.button_group(key="sports_portfolio_area").set_value(page).run()
             self.assertFalse(at.exception, str(at.exception))
