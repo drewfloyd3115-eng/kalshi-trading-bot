@@ -15,6 +15,7 @@ ALIASES = {
     "boise st": "boise state", "fresno st": "fresno state",
     "middle tennessee st": "middle tennessee",
     "colorado st": "colorado state", "texas st": "texas state",
+    "arizona st": "arizona state",
 }
 MASCOT_SUFFIXES = (
     "rainbow warriors", "sun devils", "broncos", "bulldogs", "dukes",
@@ -30,7 +31,7 @@ MASCOT_SUFFIXES = (
     "pirates", "yellow jackets", "tar heels", "wolfpack",
     "blue devils", "cyclones", "mustangs", "rockets", "rams",
     "raiders", "bears", "ducks", "lions", "hawks", "red wolves",
-    "warhawks", "green wave", "mean green", "red raiders", "gamecocks", "blue hens", "bobcats", "utes", "jayhawks",
+    "warhawks", "green wave", "mean green", "red raiders", "blue raiders", "gamecocks", "blue hens", "bobcats", "utes", "jayhawks",
 )
 def normalized(name):
     value = re.sub(r"[^a-z0-9 ]+", " ", str(name or "").lower()).strip()
