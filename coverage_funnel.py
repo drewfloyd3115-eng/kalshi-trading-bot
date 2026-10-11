@@ -19,7 +19,7 @@ def coverage_funnel(odds, diagnostics, comparisons, markets=None):
                     tickers.add(str(market.get("ticker")))
             partial=[]
             for _,m in markets[markets["league"]==league].iterrows():
-                parts=re.split(r"\\s+(?:vs\\.?|versus|at|@)\\s+",str(m.get("event","")),flags=re.I)
+                parts=re.split(r"\s+(?:vs\.?|versus|at|@)\s+",str(m.get("event","")),flags=re.I)
                 if len(parts)==2 and ({normalized(home),normalized(away)} & {normalized(p) for p in parts}):
                     partial.append(str(m.get("event")))
             nearest[(league,str(away)+" @ "+str(home))]="; ".join(sorted(set(partial))[:3])
