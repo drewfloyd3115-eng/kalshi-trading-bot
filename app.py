@@ -28,7 +28,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 4.1 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 4.2 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -52,19 +52,19 @@ if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
                 quick_rows, quick_remaining = fetch_odds(api_key, quick_league)
                 quick_odds = pd.DataFrame(quick_rows)
                 quick_matches = compare(quick_markets, quick_odds)
-            st.session_state.quick_results = {
+            scan_finished_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+            scan_result = {
                 "league": quick_league,
                 "markets": len(quick_markets),
                 "sportsbook_rows": len(quick_odds),
                 "matched": len(quick_matches),
                 "remaining": quick_remaining,
-                "time": datetime.now(timezone.utc).isoformat(timespec="seconds")
+                "time": scan_finished_at
             }
+            st.session_state.quick_results = scan_result
             st.session_state.quick_diagnostics = diagnostics(quick_markets, quick_odds)
             st.session_state.quick_funnel = coverage_funnel(quick_odds, st.session_state.quick_diagnostics, quick_matches, quick_markets)
             st.session_state.quick_event_audit = audit(quick_markets, quick_odds)
-            st.session_state.previous_comparisons = st.session_state.get("quick_comparisons", pd.DataFrame()).copy()
-            st.session_state.previous_scan_time = st.session_state.get("quick_results", {}).get("time")
             st.session_state.quick_comparisons = quick_matches
             st.session_state.quick_eligibility = eligibility_dashboard(quick_matches, quick_odds, st.session_state.quick_results["time"])
             st.session_state.quick_odds_cache = quick_odds
@@ -76,7 +76,16 @@ if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
             st.session_state.quick_depth = scan_candidates(
                 quick_matches, quick_bankroll,
                 quick_exposure + st.session_state.paper_exposure)
+            # Commit history only after the complete scan succeeds, separately per league.
+            snapshots = st.session_state.setdefault("completed_scan_snapshots", {})
+            old = snapshots.get(quick_league)
+            st.session_state.previous_comparisons = old["matches"].copy() if old else pd.DataFrame()
+            st.session_state.previous_scan_time = old["time"] if old else None
+            snapshots[quick_league] = {"time": scan_finished_at, "matches": quick_matches.copy()}
+
         except Exception as exc:
+            st.session_state.pop("previous_comparisons", None)
+            st.session_state.pop("previous_scan_time", None)
             st.session_state.pop("quick_results", None)
             st.session_state.pop("quick_odds_cache", None)
             st.session_state.pop("quick_markets_cache", None)
