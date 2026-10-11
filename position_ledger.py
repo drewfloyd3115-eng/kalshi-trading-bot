@@ -256,12 +256,25 @@ def record_entry(ledger, *, league, event, ticker, outcome_team, side, shares,
                      maximum=Decimal("10000000"), places=2)
     queued = _decimal(queued_exposure, "Existing paper queue exposure",
                       maximum=Decimal("10000000"), places=2)
-    existing = Decimal(str(ledger_summary(canonical)["open_cost_usd"]))
+    # Use exact unrounded cost allocations for risk enforcement.
+    # Reporting rounds cents, but rounded exposure could otherwise bypass caps.
+    _, states = _replay(canonical)
+    existing = sum((
+        p["entry_cost"] * Decimal(p["remaining_shares"]) / Decimal(p["entry_shares"])
+        for p in states.values() if p["remaining_shares"] > 0
+    ), Decimal(0))
     entry_cost = Decimal(count) * price / HUNDRED + fee
     one_cap = bank * Decimal(str(MAX_TRADE_BANKROLL_PCT))
     total_cap = bank * Decimal(str(MAX_TOTAL_EXPOSURE_PCT))
     if entry_cost > one_cap:
         raise ValueError("Hypothetical entry exceeds 1% paper-bankroll limit (including fee)")
+    same_market_exposure = sum((
+        p["entry_cost"] * Decimal(p["remaining_shares"]) / Decimal(p["entry_shares"])
+        for p in states.values()
+        if p["remaining_shares"] > 0 and p["ticker"] == str(ticker).strip()
+    ), Decimal(0))
+    if same_market_exposure + entry_cost > one_cap:
+        raise ValueError("Existing paper holdings plus new entry exceed 1% per-market limit")
     if existing + other + queued + entry_cost > total_cap:
         raise ValueError("Open positions plus queue/other exposure exceed 3% paper-bankroll limit")
     position_id, transaction_id = uuid.uuid4().hex, uuid.uuid4().hex
