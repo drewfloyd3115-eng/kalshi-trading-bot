@@ -7,8 +7,9 @@ Personal-use CFB/NFL research and **paper-trading** roadmap. This is a technical
 - [ ] **Stabilize current paper app:** verify real iPhone UI flows and scan-to-scan comparisons; verify CSV snapshot restore and cross-session state where supported.
 - [ ] **Validate research calculations:** contract identity, live kickoff eligibility, source freshness, consensus disagreement, executable order-book prices, contract-specific fees, and position/exposure limits.
 - [x] **Phase 1 — Manual hypothetical position ledger:** explicit paper entry/exit transactions, proportionally allocated entry fees, partial exits, independent exposure accounting, and strict CSV backup/restore. These are *manual assumptions*, not verified prices or fills.
-- [ ] **Verify full end-to-end paper lifecycle:** distinguish observed quotes from real executed fills; verify market-specific fees, settlement rules, probability calibration and actual net P&L. Manual ledger math alone is not sufficient.
-- [ ] **NEW — Active-position monitoring and exit / profit-taking decision support** (details below).
+- [ ] **Verify full end-to-end paper lifecycle:** distinguish observed quotes from real executed fills; verify market-specific fees, settlement rules, probability calibration and actual net P&L. Manual ledger and Phase 2 quote research are not sufficient.
+- [x] **Phase 2 offline regression suite:** 100 tests passing at commit fd59868 on 2026-10-11. Public Kalshi live market integration and iPhone quote-panel UX not yet independently tested.
+- [ ] **Active-position monitoring and exit / profit-taking decision support** (Phase 2 manual public-depth research completed; executable verification and actual hold/sell decisions remain open; details below).
 - [ ] Continue sports-focused mobile UI refinement, including the Portfolio display, without changing trading/risk rules.
 
 ## NEW: Active-position monitoring and profit-taking decisions
@@ -18,9 +19,11 @@ Personal-use CFB/NFL research and **paper-trading** roadmap. This is a technical
 ### Technical work
 
 - [x] **Manual paper positions ledger (Phase 1):** separate record of exact ticker/event, YES/NO side, hypothetical entry price, manually entered fees, timestamp, shares remaining, position cost, and manual partial/full exits. Scans and queue items never automatically become fills. Real fill imports and verified fee sources are still pending.
-- [ ] **Separate manual action: “Review Open Positions”:** inspect positions without requiring or triggering a new-buy scan. No hidden sportsbook API requests; refresh only when requested. Use cached information wherever possible and show the last refresh time.
-- [ ] **Executable exit-price validation:** evaluate the correct **bid available to sell the held side**, not its purchase ask or last trade; include available depth at each price, quantity, spread, partial-fill exposure, and quote age. Mark stale, absent or thin bids as **UNVERIFIED — NO EXIT SIGNAL**.
-- [ ] **Net realizable P&L:** for full and partial paper exits estimate proceeds less entry and exit fees, net dollars, net ROI on cost basis, break-even bid, and impact on remaining exposure. Do not show a profitable exit based only on a midpoint or indicative quote.
+- [x] **Phase 2 — Manual action: “Review Open Positions”:** independent, explicit button for the selected paper holding; read-only public Kalshi market and held-side order-book checks, with a UTC review timestamp and short-lived cached snapshot. No sportsbook API request or background checks.
+- [x] **Indicative held-side bid-depth and partial-sale research (Phase 2):** sell YES into YES resting bids or NO into NO resting bids (never invert to the buy ask); display depth by price, covered quantity, shortfall, conservative failure states and scan age; never generate a verified sell signal.
+- [ ] **Executable exit-price validation:** source bid age, current counterparty/depth, actual sellability, bid-ask spread, and market-specific fee schedule must still be verified before the screen can recommend an exit. An observed resting bid is **not** a guaranteed fill.
+- [x] **Indicative full/partial exit proceeds (Phase 2):** compute observed-depth gross proceeds, generic estimated exit fees, allocated manual entry cost, hypothetical net P&L and estimated ROI on covered shares only. Explicitly label all displayed numbers as **UNVERIFIED**, not actual proceeds or profits.
+- [ ] **Validated realizable P&L:** use certified market-specific fee metadata, independently fresh executable bids, break-even price, live exposure and fill-state audit before elevating projections into action recommendations.
 - [ ] **Hold versus exit analysis:** compare estimated net proceeds from selling now with a *separately validated* probability-based value of holding to settlement, time remaining, injury/game-state changes, price movement, uncertainty, and concentration/risk limits. Pregame probabilities must not be blindly reused in live games.
 - [ ] **Decision labels with reasons:** `REVIEW PROFIT TAKE`, `REVIEW PARTIAL EXIT`, `HOLD FOR REVIEW`, and `INSUFFICIENT DATA`. Each explanation should specify expected net proceeds, what has changed, why the candidate is being surfaced, and which market facts remain unverified. Labels are **paper research prompts**, not executed orders or guaranteed +EV recommendations.
 - [ ] **Independent position monitoring panel:** show open positions, entry vs current validated bid, unrealized/realizable P&L, profit-target and stop-loss *review* thresholds (user configurable), elapsed time, quote quality, and risk concentration; show exits even if the new-buy list is empty.
@@ -29,12 +32,12 @@ Personal-use CFB/NFL research and **paper-trading** roadmap. This is a technical
 
 ### Acceptance tests before marking complete
 
-- [ ] Open paper position can show an actionable *research review* while new-buy opportunities = **0**.
-- [ ] Wrong-side ask, stale quotes, no executable bid or insufficient depth **never** trigger a verified profit-taking opportunity.
+- [x] Open paper position can trigger a distinct *read-only review* with zero new-buy candidates. Actual actionable recommendations remain blocked pending market validation.
+- [x] Offline tests reject buy-side price inversion, no resting bids, stale or changed snapshots, market/ticker mismatch and insufficient depth. All observations remain **UNVERIFIED — NO EXIT SIGNAL**.
 - [x] Manual hypothetical P&L correctly accounts for entered entry/exit fees, quantity, partial exits, and remaining cost exposure (offline ledger regression tests). Actual market-specific fees remain unverified.
 - [ ] Live/in-play scenarios block hold-value calculations when an independently updated probability estimate is unavailable.
 - [x] Manual paper exit transactions survive CSV export/import with stable transaction IDs; duplicate transactions and over-selling are rejected.
-- [ ] Phone UI makes **Positions / Exit Review** visible from the Portfolio without obscuring the main Scan Now workflow.
+- [x] Phone UI exposes **Portfolio / Exit review / Review selected position**, independently of the main Scan Now workflow (automated app rendering tests; iPhone visual check pending).
 - [ ] All offline regression tests pass; manually verify one end-to-end paper position and exit before relying on the feature.
 
 **Release gate:** Design and implement this as a **paper-only** capability first. Real trading, automated trading, and background notifications require separate security, data and risk review.
