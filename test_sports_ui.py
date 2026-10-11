@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 import pandas as pd
 
-from sports_ui import opportunity_view, research_label
+from sports_ui import opportunity_view, research_label, opportunity_card_html, scan_age_label
 
 
 class SportsUITests(unittest.TestCase):
@@ -22,6 +22,34 @@ class SportsUITests(unittest.TestCase):
         kickoff = (self.now + timedelta(hours=2)).isoformat()
         self.odds = pd.DataFrame([{"home": "Alpha", "away": "Beta", "start": kickoff}
                                   for _ in range(3)])
+
+    def test_cards_escape_market_feed_html(self):
+        sample = {
+            "event": '<img src=x onerror=alert(1)> vs School',
+            "outcome_team": '<script>attack</script>',
+            "league": "CFB", "side": "YES", "net_edge_pp_1share": 8.0,
+            "ask_cents": 54.0, "fair_pct": 63.0, "books": 2,
+            "book_spread_pp": 1.5, "oldest_quote_minutes": 2.0,
+            "depth_status": "<b>unverified</b>",
+            "reason": "<script>unsanitized</script>",
+            "research_status": "BLOCKED"
+        }
+        markup = opportunity_card_html(sample)
+        self.assertNotIn("<script>", markup)
+        self.assertNotIn("<img", markup)
+        self.assertIn("&lt;script&gt;", markup)
+        self.assertIn("BLOCKED", markup)
+
+    def test_scan_age_stale_is_never_current(self):
+        current, allowed = scan_age_label(
+            (self.now - timedelta(minutes=8)).isoformat(), now=self.now)
+        self.assertFalse(allowed)
+        self.assertIn("STALE", current)
+
+    def test_missing_scan_timestamp_not_current(self):
+        label, allowed = scan_age_label(None, now=self.now)
+        self.assertFalse(allowed)
+        self.assertIn("unknown", label.lower())
 
     def test_empty_opportunities(self):
         self.assertTrue(opportunity_view(pd.DataFrame()).empty)
