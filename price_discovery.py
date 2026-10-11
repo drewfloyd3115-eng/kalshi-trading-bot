@@ -36,7 +36,22 @@ def price_discovery(matches):
         except (TypeError, ValueError, KeyError, ZeroDivisionError):
             continue
     result = pd.DataFrame(rows, columns=columns)
+    if not result.empty:
+        result["outcome_key"] = result["event"].astype(str).str.lower().str.strip() + " | " + result["outcome_team"].astype(str).str.lower().str.strip()
+        result["route_count"] = result.groupby("outcome_key")["ticker"].transform("size")
+
+        result["quote_quality"] = result.apply(lambda r: "REVIEW — disagreement" if pd.notna(pd.to_numeric(r["book_spread_pp"], errors="coerce")) and float(r["book_spread_pp"]) > 3 else ("REVIEW — quote age" if pd.notna(pd.to_numeric(r["oldest_quote_minutes"], errors="coerce")) and float(r["oldest_quote_minutes"]) > 10 else ("UNVERIFIED — check source" if pd.isna(pd.to_numeric(r["books"], errors="coerce")) or float(r["books"]) < 2 else "CONSENSUS — still unverified")), axis=1)
+        result["depth_status"] = "NOT INSPECTED — no executable price verified"
+        result["depth_best_ask_cents"] = None
+        result["depth_edge_pp"] = None
+        if depth is not None and not depth.empty:
+            for _, d in depth.iterrows():
+                mask = (result["ticker"].astype(str) == str(d.get("ticker"))) & (result["side"].astype(str) == str(d.get("side")))
+                result.loc[mask, "depth_status"] = str(d.get("reason", "Depth not verified"))
+                result.loc[mask, "depth_best_ask_cents"] = d.get("depth_ask_cents")
+                result.loc[mask, "depth_edge_pp"] = d.get("depth_edge_pp")
     if result.empty:
         return result
-    return result.sort_values(["gap_to_threshold_pp", "book_spread_pp"],
-                              ascending=[True, False], na_position="last").reset_index(drop=True)
+    result = result.sort_values(["gap_to_threshold_pp", "book_spread_pp"], ascending=[True, False], na_position="last").reset_index(drop=True)
+    result["best_route_for_outcome"] = ~result.duplicated("outcome_key")
+    return result
