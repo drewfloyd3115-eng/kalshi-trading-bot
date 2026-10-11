@@ -151,6 +151,40 @@ class ExitDepthTests(unittest.TestCase):
         self.assertIn("not in the supported", r["reason"])
         self.assertIn("UNVERIFIED", r["status"])
 
+    def test_rejected_ticker_never_claims_recent_public_lookup(self):
+        calls = []
+        fake = dict(self.position, ticker="KXCFB-TEST-MARKET")
+        result = review_public_position(
+            fake, market_fetch=lambda t: calls.append(t),
+            book_fetch=lambda t: calls.append(t), observed_at=self.now)
+        self.assertEqual(calls, [])
+        self.assertEqual(result["lookup_status"], "REJECTED BEFORE LOOKUP")
+        self.assertIn("Rejected before public lookup", result["reason"])
+        valid, reason = snapshot_integrity(result, fake, now=self.now)
+        self.assertFalse(valid)
+        self.assertIn("No Kalshi public lookup", reason)
+
+    def test_market_only_lookup_does_not_imply_bid_freshness(self):
+        result = review_public_position(
+            self.position, market_fetch=lambda _: {"ticker": self.position["ticker"],
+                                                   "status": "closed"},
+            book_fetch=lambda _: self.fail("closed market must not fetch orderbook"),
+            observed_at=self.now)
+        self.assertEqual(result["lookup_status"], "MARKET METADATA ONLY — NO ORDERBOOK")
+        valid, message = snapshot_integrity(result, self.position, now=self.now)
+        self.assertFalse(valid)
+        self.assertIn("no sell-side order book", message)
+
+    def test_failed_public_lookup_invalidates_integrity(self):
+        def fail(_):
+            raise OSError("unreachable")
+        result = review_public_position(self.position, market_fetch=fail,
+                                        observed_at=self.now)
+        self.assertEqual(result["lookup_status"], "PUBLIC LOOKUP FAILED")
+        valid, message = snapshot_integrity(result, self.position, now=self.now)
+        self.assertFalse(valid)
+        self.assertIn("lookup failed", message)
+
     def test_changed_review_quantity_invalidates_snapshot(self):
         r = estimate_exit(self.position, self.market, self.book,
                           requested_shares=2, observed_at=self.now)
