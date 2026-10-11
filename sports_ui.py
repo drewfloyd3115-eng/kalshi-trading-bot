@@ -88,25 +88,23 @@ div.stButton > button[kind="primary"]:hover {background:#086bd2; color:white;}
     border-color: #1b3b58; border-radius: 12px;
 }
 [data-testid="stDataFrame"] {border:1px solid #1b3b58; border-radius:12px;}
-/* All five navigation destinations remain visible on narrow iPhones. */
-.st-key-sports_nav div[role="radiogroup"] {
-    display: grid !important; grid-template-columns: repeat(5, minmax(0,1fr));
-    overflow: visible !important; gap: 7px;
+/* Streamlit button grid instead of a clipped horizontal radio menu. */
+[class*="st-key-nav_"] button {
+    width:100%; min-width:0; min-height:42px;
+    border:1px solid #254763; border-radius:11px;
+    font-weight:650; white-space:normal; overflow-wrap:break-word;
+    padding:0.40rem 0.35rem;
 }
-.st-key-sports_nav div[role="radiogroup"] label {
-    min-width:0; min-height:44px; justify-content:center; text-align:center;
-    white-space:normal; border-radius:11px; border:1px solid #234665;
-    background:#0a2034; padding:8px 6px; font-size:0.84rem;
-}
-@media (max-width: 650px) {
+@media (max-width:650px) {
     .block-container {padding-top:0.85rem; padding-left:1rem; padding-right:1rem;}
-    .st-key-sports_nav div[role="radiogroup"] {
-        grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px;
-    }
-    .st-key-sports_nav div[role="radiogroup"] label {
-        font-size:.76rem; padding:7px 5px; line-height:1.2;
-    }
+    [class*="st-key-nav_"] button {font-size:.78rem; line-height:1.15; padding:.36rem .18rem;}
     .kl-hero {padding:12px 14px; margin-bottom:7px; border-radius:14px;}
+    .kl-title {font-size:1.65rem; margin:5px 0;}
+    .kl-subtitle {font-size:.82rem; line-height:1.32;}
+    .kl-eyebrow {font-size:.62rem;}
+    .kl-pill {padding:4px 8px; font-size:.68rem;}
+}
+.kl-hero {padding:12px 14px; margin-bottom:7px; border-radius:14px;}
     .kl-title {font-size:1.65rem; margin:5px 0;}
     .kl-subtitle {font-size:.82rem; line-height:1.32;}
     .kl-eyebrow {font-size:.62rem;}
@@ -131,6 +129,31 @@ div.stButton > button[kind="primary"]:hover {background:#086bd2; color:white;}
 .kl-small {color:#8fabc7;font-size:0.78rem;}
 </style>
 """, unsafe_allow_html=True)
+
+
+def _navigate_to(page):
+    """Switch local presentation only. No scanner calls or trading actions."""
+    st.session_state["sports_nav"] = page
+
+
+def navigation():
+    """Every destination is visible on phones using native Streamlit buttons."""
+    if st.session_state.get("sports_nav") not in PAGES:
+        st.session_state["sports_nav"] = "Home"
+    for items in (
+        [("Home", "Home", "nav_home"),
+         ("Opportunities", "Opportunities", "nav_opportunities"),
+         ("Market Detail", "Market Detail", "nav_market_detail")],
+        [("Portfolio", "Portfolio", "nav_portfolio"),
+         ("Research", "Research", "nav_research")],
+    ):
+        columns = st.columns(len(items), gap="small")
+        for col, (label, page, widget_key) in zip(columns, items):
+            with col:
+                st.button(label, key=widget_key, use_container_width=True,
+                          type="primary" if st.session_state["sports_nav"] == page else "secondary",
+                          on_click=_navigate_to, args=(page,))
+    return st.session_state["sports_nav"]
 
 
 def header():
