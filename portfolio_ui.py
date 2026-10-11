@@ -7,6 +7,7 @@ from position_ledger import (
     empty_ledger, export_ledger, import_ledger, ledger_summary, open_positions,
     record_entry, record_exit, validate_ledger,
 )
+from exit_review_ui import render_exit_review
 
 
 def portfolio_view_model(history, queue, bankroll, other_exposure, queue_exposure):
@@ -411,18 +412,19 @@ def portfolio_page(bankroll, other_exposure):
     elif area == "Exit review":
         st.markdown("### Active positions & profit-taking")
         st.markdown('<div class="kl-port-panel"><div class="kl-port-title">'
-                    'IN DEVELOPMENT · NO EXIT SIGNALS</div>'
-                    '<div class="kl-port-muted">The planned independent position scanner will '
-                    'review whether to hold, partially sell or take profits, even if no new buys '
-                    'qualify. It must verify the bid and depth for the side being sold, fees, '
-                    'partial fills and updated win probabilities where applicable. '
-                    'No sell opportunity is currently verified.</div></div>',
+                    'PHASE 2 · SELL-SIDE DEPTH RESEARCH</div>'
+                    '<div class="kl-port-muted">Manually inspect PUBLIC resting bids '
+                    'for the side you actually hold. The result shows indicative '
+                    'covered shares, proceeds and estimated fees. No actual fill, '
+                    'source quote age, market-specific fee schedule or verified hold '
+                    'value is established, so no exit signal is authorized.</div></div>',
                     unsafe_allow_html=True)
-        st.caption(f'{model["open_paper_fills"]} unresolved paper fills in this session. '
-                   'The present scanner does not supply executable exit bids.')
-        st.info("This is an upcoming paper-only tool—not an active trading signal, "
-                "automatic sell order or background monitor.")
+        st.info("Read-only public market checks are available below. "
+                "Profit-taking/hold-sell signals remain under development; "
+                "no automatic orders or background monitoring.")
         st.link_button("Technical exit-review roadmap",
                        "https://github.com/drewfloyd3115-eng/kalshi-trading-bot/issues/1")
+        st.divider()
+        render_exit_review(ledger)
         st.divider()
         _manual_exit_form(ledger)
