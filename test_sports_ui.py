@@ -52,9 +52,14 @@ class SportsUIAppSmokeTests(unittest.TestCase):
         from streamlit.testing.v1 import AppTest
         at = AppTest.from_file("app.py", default_timeout=20).run()
         self.assertFalse(at.exception, str(at.exception))
-        for page in ("Opportunities", "Market Detail", "Portfolio"):
-            at.radio(key="sports_nav").set_value(page).run()
+        for page, key in (("Opportunities", "nav_opportunities"),
+                          ("Market Detail", "nav_market_detail"),
+                          ("Portfolio", "nav_portfolio"),
+                          ("Research", "nav_research"),
+                          ("Home", "nav_home")):
+            at.button(key=key).click().run()
             self.assertFalse(at.exception, str(at.exception))
+            self.assertEqual(at.session_state["sports_nav"], page)
 
 
 if __name__ == "__main__":
