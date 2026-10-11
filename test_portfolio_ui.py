@@ -88,7 +88,8 @@ class PortfolioAppTests(unittest.TestCase):
             self.assertEqual(at.session_state["sports_portfolio_area"], page)
         at.button_group(key="sports_portfolio_area").set_value("Exit review").run()
         text = "\n".join(str(x.value) for x in at.markdown)
-        self.assertIn("NO EXIT SIGNALS", text)
+        self.assertIn("SELL-SIDE DEPTH RESEARCH", text)
+        self.assertIn("Review Open Positions", text)
 
 
 if __name__ == "__main__":
