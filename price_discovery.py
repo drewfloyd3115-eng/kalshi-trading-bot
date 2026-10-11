@@ -3,7 +3,7 @@ import pandas as pd
 from config import MIN_EDGE_PP
 from edge_engine import taker_fee
 
-def price_discovery(matches):
+def price_discovery(matches, depth=None):
     columns = ["event", "outcome_team", "ticker", "side", "fair_pct",
                "ask_cents", "net_edge_pp_1share", "gap_to_threshold_pp",
                "max_entry_cents_1share", "price_drop_needed_cents",
