@@ -374,19 +374,20 @@ def portfolio_page(bankroll, other_exposure):
                 st.caption("Showing 30 positions; view all transactions in History.")
         _manual_entry_form(bankroll, other_exposure)
 
-        st.markdown("#### Legacy imported paper journal fills")
-        st.markdown("### Unresolved paper positions")
-        st.caption("Only journal records explicitly marked PAPER_FILLED and UNRESOLVED appear here.")
-        if model["open_rows"].empty:
-            st.info("No open hypothetical fills recorded. A saved observation or queued paper "
-                    "decision is not a position.")
-        else:
-            for _, record in model["open_rows"].head(25).iterrows():
-                st.markdown(_open_paper_card(record), unsafe_allow_html=True)
-            if len(model["open_rows"]) > 25:
-                st.caption(f'Showing 25 of {len(model["open_rows"])} records; see History for all.')
-        st.warning("Entry fees, current sell-side bids, executable depth and net exit values "
-                   "are not verified by the existing journal.")
+        with st.expander("Older imported paper-journal fills (separate records)", expanded=False):
+            st.caption("This older journal is independent of the manual position ledger shown "
+                       "above. A manual paper entry will not appear twice.")
+            if model["open_rows"].empty:
+                st.caption("No entries in the older imported journal. "
+                           "Any manual positions are displayed above.")
+            else:
+                for _, record in model["open_rows"].head(25).iterrows():
+                    st.markdown(_open_paper_card(record), unsafe_allow_html=True)
+                if len(model["open_rows"]) > 25:
+                    st.caption(f'Showing 25 of {len(model["open_rows"])} older records; '
+                               "see History for all.")
+            st.caption("Legacy journal quotes, sell-side depth and net exit values "
+                       "are not verified.")
 
     elif area == "History":
         _ledger_history(ledger)
