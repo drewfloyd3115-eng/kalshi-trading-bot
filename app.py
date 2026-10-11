@@ -26,6 +26,12 @@ from contract_validation import validate_contract
 from inspection_diagnostics import explain
 from pregame_dashboard import eligibility_dashboard
 from scanner import fetch_sports_markets, fetch_orderbook
+# Streamlit reruns app.py but can retain previously-imported helper modules
+# in the same Python worker after a GitHub deployment. Refresh presentation
+# functions explicitly so UI version labels and screens cannot diverge.
+import importlib
+import sports_ui
+importlib.reload(sports_ui)
 from sports_ui import (PAGES, add_styles, header, home_overview, opportunities_page,
                        detail_page, portfolio_page)
 
@@ -40,7 +46,7 @@ def sportsbook_api_key():
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 add_styles()
 header()
-st.caption("Sports UI preview 1.5 · Paper research only · Live trading disabled.")
+st.caption("Sports UI preview 1.6 · Paper research only · Live trading disabled.")
 
 # Streamlit's native pills wrap on mobile; st.columns always stack at phone width.
 # One single-select widget controls every view without CSS-dependent navigation.
