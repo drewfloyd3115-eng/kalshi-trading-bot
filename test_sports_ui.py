@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 import pandas as pd
 
-from sports_ui import opportunity_view, research_label, opportunity_card_html, scan_age_label
+from sports_ui import opportunity_view, research_label, opportunity_card_html, scan_age_label, detail_panel_html
 
 
 class SportsUITests(unittest.TestCase):
@@ -65,6 +65,61 @@ class SportsUITests(unittest.TestCase):
         self.assertNotIn("BLOCKED — no trade", html)
         self.assertNotIn("PRELIMINARY +5pp", html)
 
+    def test_market_detail_preview_contains_no_fake_price_or_trade(self):
+        preview = {
+            "event": "Matchup not loaded", "outcome_team": "No outcome selected",
+            "research_status": "DESIGN PREVIEW", "fair_pct": None,
+            "ask_cents": None, "net_edge_pp_1share": None,
+            "reason": "DESIGN PREVIEW ONLY",
+        }
+        markup = detail_panel_html(preview)
+        self.assertIn("DESIGN PREVIEW", markup)
+        self.assertIn("Estimated fair chance", markup)
+        self.assertIn("style=\"width:0.00%\" ", markup)
+        self.assertNotIn("PRELIMINARY — not approved", markup)
+
+    def test_market_detail_stale_scan_stays_blocked(self):
+        sample = {
+            "event": "Alpha vs Beta", "outcome_team": "Alpha",
+            "ticker": "TICKER1", "side": "YES", "fair_pct": 62,
+            "ask_cents": 54, "net_edge_pp_1share": 6.0,
+            "research_status": "REVIEW ONLY — NOT APPROVED",
+            "quote_status": "CACHED RECENT", "kickoff_status": "FUTURE (cached)"
+        }
+        markup = detail_panel_html(
+            sample, (self.now - timedelta(minutes=10)).isoformat(), now=self.now)
+        self.assertIn("BLOCKED — stale or missing scan", markup)
+        self.assertNotIn("PRELIMINARY — not approved", markup)
+        self.assertIn("62.00%", markup)
+        self.assertIn("54.0¢", markup)
+
+    def test_market_detail_html_escapes_feed_fields(self):
+        sample = {
+            "event": '<script>alert(1)</script>',
+            "outcome_team": '<img src=x onerror=alert(2)>',
+            "ticker": "<b>attack</b>", "side": "YES",
+            "reason": '<script>attack</script>', "research_status": "BLOCKED",
+            "fair_pct": 55, "ask_cents": 53, "net_edge_pp_1share": -1
+        }
+        markup = detail_panel_html(sample)
+        self.assertNotIn("<script>", markup)
+        self.assertNotIn("<img", markup)
+        self.assertIn("&lt;script&gt;", markup)
+        self.assertIn("&lt;img", markup)
+
+    def test_market_detail_fee_arithmetic_is_one_share(self):
+        from edge_engine import taker_fee
+        sample = {
+            "event": "Alpha vs Beta", "outcome_team": "Alpha",
+            "research_status": "REVIEW ONLY — NOT APPROVED",
+            "fair_pct": 62, "ask_cents": 54, "net_edge_pp_1share": 6.0
+        }
+        markup = detail_panel_html(sample, self.now.isoformat(), now=self.now)
+        fee = taker_fee(54, 1)
+        self.assertIn(f"{fee:.2f} USD", markup)
+        self.assertIn(f"{0.54+fee:.2f} USD", markup)
+        self.assertIn("PRELIMINARY — not approved", markup)
+
     def test_empty_opportunities(self):
         self.assertTrue(opportunity_view(pd.DataFrame()).empty)
 
@@ -90,6 +145,18 @@ class SportsUITests(unittest.TestCase):
 
 
 class SportsUIAppSmokeTests(unittest.TestCase):
+    def test_market_detail_design_preview_without_fetching_odds(self):
+        from streamlit.testing.v1 import AppTest
+        at = AppTest.from_file("app.py", default_timeout=20).run()
+        self.assertFalse(at.exception, str(at.exception))
+        at.button_group(key="sports_nav").set_value("Market Detail").run()
+        self.assertFalse(at.exception, str(at.exception))
+        markup = "\n".join(str(item.value) for item in at.markdown)
+        self.assertIn("Market intelligence / CFB + NFL", markup)
+        self.assertIn("DESIGN PREVIEW", markup)
+        self.assertIn("Estimated probability comparison", markup)
+        self.assertIn("Pregame and quote-quality checks", markup)
+
     def test_new_opportunities_markup_and_placeholder_are_rendered(self):
         """Catch stale presentation modules that render an obsolete UI."""
         from streamlit.testing.v1 import AppTest
