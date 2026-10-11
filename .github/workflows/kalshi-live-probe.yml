@@ -1,0 +1,27 @@
+name: Read-only Kalshi live API smoke test
+
+# The real-market probe is independent of the deployment/regression workflow.
+# It runs only on explicit workflow dispatch or when the probe/workflow is edited.
+# It does NOT use Firecrawl, sportsbook keys, credentials, or execute orders.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - live_kalshi_probe.py
+      - .github/workflows/kalshi-live-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  public-api-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements.txt
+      - name: Inspect public game-winner market and held-side book (no orders)
+        run: python live_kalshi_probe.py
