@@ -32,8 +32,11 @@ from scanner import fetch_sports_markets, fetch_orderbook
 import importlib
 import sports_ui
 importlib.reload(sports_ui)
+import portfolio_ui
+importlib.reload(portfolio_ui)
 from sports_ui import (PAGES, add_styles, header, home_overview, opportunities_page,
-                       detail_page, portfolio_page)
+                       detail_page)
+from portfolio_ui import portfolio_page
 
 def sportsbook_api_key():
     """Offline research pages must load without a configured sportsbook secret."""
@@ -46,7 +49,7 @@ def sportsbook_api_key():
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 add_styles()
 header()
-st.caption("Sports UI preview 1.8 · Paper research only · Live trading disabled.")
+st.caption("Sports UI preview 1.9 · Paper research only · Live trading disabled.")
 
 # Streamlit's native pills wrap on mobile; st.columns always stack at phone width.
 # One single-select widget controls every view without CSS-dependent navigation.
