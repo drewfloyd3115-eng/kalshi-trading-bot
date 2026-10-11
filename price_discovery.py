@@ -52,6 +52,6 @@ def price_discovery(matches, depth=None):
                 result.loc[mask, "depth_edge_pp"] = d.get("depth_edge_pp")
     if result.empty:
         return result
-    result = result.sort_values(["gap_to_threshold_pp", "book_spread_pp"], ascending=[True, False], na_position="last").reset_index(drop=True)
+    result = result.sort_values(["gap_to_threshold_pp", "net_edge_pp_1share", "book_spread_pp"], ascending=[True, False, False], na_position="last").reset_index(drop=True)
     result["best_route_for_outcome"] = ~result.duplicated("outcome_key")
     return result
