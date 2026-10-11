@@ -21,6 +21,33 @@ class ExitReviewCardTests(unittest.TestCase):
         self.assertEqual(_usd(None), "—")
         self.assertEqual(_cents(None), "—")
 
+    def test_rejected_local_ticker_does_not_claim_recent_lookup(self):
+        record = {
+            "ticker": "KXCFB-TEST-MARKET", "side": "YES",
+            "reason": "Rejected before public lookup: unsupported ticker",
+            "lookup_status": "REJECTED BEFORE LOOKUP",
+            "covered_shares": 0, "requested_shares": 4,
+        }
+        rendered = _review_card(record, False,
+                                "No Kalshi public lookup performed")
+        self.assertIn("NO PUBLIC LOOKUP", rendered)
+        self.assertIn("REJECTED BEFORE LOOKUP", rendered)
+        self.assertNotIn("RECENT LOOKUP", rendered)
+        self.assertIn("No Kalshi public lookup performed", rendered)
+
+    def test_real_book_lookup_still_not_certified_execution(self):
+        record = {
+            "ticker": "KXNCAAFGAME-SAMPLE", "side": "YES",
+            "reason": "Orderbook snapshot observed",
+            "lookup_status": "PUBLIC ORDERBOOK RETURNED",
+            "covered_shares": 4, "requested_shares": 4,
+            "best_bid_cents": 75, "net_proceeds_usd": 2.88
+        }
+        rendered = _review_card(record, True, "Recent retrieval; not a fill")
+        self.assertIn("RECENT RETRIEVAL", rendered)
+        self.assertIn("NO EXIT SIGNAL", rendered)
+        self.assertIn("NOT actual realized profit", rendered)
+
     def test_escape_quoted_metadata_and_reason(self):
         record = {
             "ticker": "<img src=x onerror=alert(1)>",
