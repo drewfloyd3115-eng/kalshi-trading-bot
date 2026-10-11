@@ -142,7 +142,7 @@ if "quick_results" in st.session_state:
     passing_count = (int((pd.to_numeric(latest_eligibility["net_edge_pp_1share"],
                                        errors="coerce") >= 5).sum())
                      if not latest_eligibility.empty else 0)
-    st.error("NO VERIFIED TRADE — research estimates are not executable orders.")
+    st.warning("NO VERIFIED TRADE — research estimates are not executable orders.")
     summary_a, summary_b, summary_c = st.columns(3)
     summary_a.metric("Distinct outcomes", len(unique_outcomes))
     summary_b.metric("Preliminary +5pp sides", passing_count)
