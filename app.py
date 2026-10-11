@@ -40,7 +40,7 @@ def sportsbook_api_key():
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 add_styles()
 header()
-st.caption("Sports UI preview 1.3 · Paper research only · Live trading disabled.")
+st.caption("Sports UI preview 1.3.1 · Paper research only · Live trading disabled.")
 
 # Keep essential mobile navigation in the entrypoint itself. This prevents a
 # stale secondary module during Streamlit Cloud hot deployment from hiding pages.
@@ -56,13 +56,16 @@ def _render_navigation():
          ("Market Detail", "nav_market_detail")),
         (("Portfolio", "nav_portfolio"), ("Research", "nav_research")),
     )
-    for items in nav_rows:
-        columns = st.columns(len(items), gap="small")
-        for col, (destination, key) in zip(columns, items):
-            with col:
-                st.button(destination, key=key, use_container_width=True,
-                          type=("primary" if st.session_state["sports_nav"] == destination else "secondary"),
-                          on_click=_set_navigation, args=(destination,))
+    # Give CSS one uniquely scoped container. Streamlit otherwise stacks
+    # columns full-width at mobile breakpoints, obscuring the Scan Now control.
+    with st.container(key="sports_navigation_grid"):
+        for items in nav_rows:
+            columns = st.columns(len(items), gap="small")
+            for col, (destination, key) in zip(columns, items):
+                with col:
+                    st.button(destination, key=key, use_container_width=True,
+                              type=("primary" if st.session_state["sports_nav"] == destination else "secondary"),
+                              on_click=_set_navigation, args=(destination,))
     return st.session_state["sports_nav"]
 
 
