@@ -12,6 +12,7 @@ from diagnostics import diagnostics
 from coverage_funnel import coverage_funnel
 from discovery_report import discovery_report
 from price_discovery import price_discovery
+from scan_monitor import scan_changes
 from event_audit import audit
 from equivalent_routes import equivalent_routes
 from route_depth import review_routes
@@ -27,7 +28,7 @@ from scanner import fetch_sports_markets, fetch_orderbook
 
 st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
 st.title("Kalshi Trade Lab")
-st.caption("Version 3.9 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
+st.caption("Version 4.0 • CFB/NFL research + paper approvals only • LIVE TRADING DISABLED")
 st.warning("Market prices are indicative snapshots. Verify executable quotes, fees, liquidity, event rules and live-game timing before any real trade. A quoted price alone does not establish positive EV.")
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -62,6 +63,7 @@ if st.button("Scan Now — paper only", type="primary", key="quick_scan"):
             st.session_state.quick_diagnostics = diagnostics(quick_markets, quick_odds)
             st.session_state.quick_funnel = coverage_funnel(quick_odds, st.session_state.quick_diagnostics, quick_matches, quick_markets)
             st.session_state.quick_event_audit = audit(quick_markets, quick_odds)
+            st.session_state.previous_comparisons = st.session_state.get("quick_comparisons", pd.DataFrame()).copy()
             st.session_state.quick_comparisons = quick_matches
             st.session_state.quick_eligibility = eligibility_dashboard(quick_matches, quick_odds, st.session_state.quick_results["time"])
             st.session_state.quick_odds_cache = quick_odds
@@ -135,6 +137,24 @@ if "quick_results" in st.session_state:
             st.download_button("Download price discovery CSV",
                 price_table.to_csv(index=False).encode("utf-8"),
                 file_name="kalshi_price_discovery.csv", mime="text/csv")
+    st.subheader("Manual opportunity monitor 4.0")
+    st.caption("Compares the latest two successful scans in this browser session. No background checks or extra API calls. Scan Now consumes the usual sportsbook request.")
+    changes = scan_changes(st.session_state.get("previous_comparisons"), st.session_state.get("quick_comparisons"), eligibility_dashboard(st.session_state.get("quick_comparisons"), st.session_state.get("quick_odds_cache"), summary.get("time")))
+    if changes.empty:
+        st.info("No comparison data. No verified trade.")
+    else:
+        known = changes["previous_edge_pp"].notna()
+        crossings = int((changes["threshold_crossing"] == "NEW +5pp — REVIEW ONLY").sum())
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Compared with prior", int(known.sum()))
+        m2.metric("New +5pp research flags", crossings)
+        m3.metric("Kickoff/quote blocked", int(changes["research_status"].str.startswith("BLOCKED").sum()))
+        if not known.any():
+            st.caption("First successful scan in this session. Run Scan Now again later to compare price movement.")
+        st.dataframe(changes, hide_index=True, use_container_width=True)
+        st.download_button("Download scan changes CSV", changes.to_csv(index=False).encode("utf-8"),
+                           file_name="kalshi_scan_changes.csv", mime="text/csv")
+    st.warning("No automatic alerts or real orders. A +5pp flag is not a verified opportunity; kickoff, quote freshness, depth, fees and rules must all be rechecked.")
     st.subheader("Opportunity dashboard — research only")
     st.caption("Top five preliminary matches. Cached data only; no extra sportsbook requests.")
     eligibility = eligibility_dashboard(st.session_state.get("quick_comparisons"), st.session_state.get("quick_odds_cache"), summary.get("time"))
