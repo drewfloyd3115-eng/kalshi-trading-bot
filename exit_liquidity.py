@@ -193,6 +193,13 @@ def review_public_position(position, requested_shares=None, *,
             "requested shares", maximum=MAX_REVIEW_SHARES)
         if requested > held:
             raise ValueError("Requested quantity exceeds manually held shares")
+        # Reject obvious example/fake tickers before using the public API.
+        # Only exact game-winner series currently supported by our scanner.
+        from scanner import SPORT_PREFIXES
+        league = str(position.get("league", "")).strip()
+        prefixes = SPORT_PREFIXES.get(league, ())
+        if not prefixes or not any(ticker.startswith(prefix + "-") for prefix in prefixes):
+            raise ValueError("Ticker is not in the supported CFB/NFL game-winner series")
         if market_fetch is None:
             market_fetch = lambda t: _get("/markets/" + quote(t, safe="")).get("market", {})
         if book_fetch is None:
@@ -222,7 +229,7 @@ def review_public_position(position, requested_shares=None, *,
         }
 
 
-def snapshot_integrity(snapshot, position, *, now=None):
+def snapshot_integrity(snapshot, position, *, now=None, requested_shares=None):
     """Check cached snapshot is recent and still matches remaining holdings."""
     if not isinstance(snapshot, dict):
         return False, "No manual exit review completed"
@@ -232,6 +239,8 @@ def snapshot_integrity(snapshot, position, *, now=None):
                 or snapshot.get("side") != side
                 or snapshot.get("held_shares_at_scan") != held):
             return False, "Position or remaining shares changed; refresh exit review"
+        if requested_shares is not None and snapshot.get("requested_shares") != requested_shares:
+            return False, "Requested sale quantity changed; refresh exit review"
         checked = _utc(snapshot.get("checked_utc"))
         at = _utc(now)
         elapsed = (at - checked).total_seconds()
