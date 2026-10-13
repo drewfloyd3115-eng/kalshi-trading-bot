@@ -1,0 +1,26 @@
+name: Read-only Kalshi NO-side integration
+
+# One-shot bounded public-data probe only. No sportsbook/API secrets,
+# account connection, trading orders or position-ledger mutation.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - no_live_probe.py
+      - .github/workflows/kalshi-no-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  public-no-book:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements.txt
+      - name: Audit NO sell bids, market age and series fee metadata
+        run: python no_live_probe.py
