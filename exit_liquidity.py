@@ -11,6 +11,7 @@ from math import isfinite
 from urllib.parse import quote
 
 from edge_engine import taker_fee
+from market_audit import market_freshness_audit, series_fee_audit
 from scanner import _get, fetch_orderbook
 
 MAX_REVIEW_SHARES = 10000
@@ -190,8 +191,9 @@ def estimate_exit(position, market, orderbook, requested_shares=None, observed_a
 
 
 def review_public_position(position, requested_shares=None, *,
-                           market_fetch=None, book_fetch=None, observed_at=None):
-    """Two public Kalshi GETs at most; return truthful request provenance."""
+                           market_fetch=None, book_fetch=None, observed_at=None,
+                           series_fetch=None):
+    """Two public market/book GETs, optional third series fee metadata GET."""
     lookup_started = False
     try:
         pid, ticker, side, held, basis = _contract(position)
@@ -212,13 +214,25 @@ def review_public_position(position, requested_shares=None, *,
             book_fetch = fetch_orderbook
         lookup_started = True
         market = market_fetch(ticker)
+        market_age = market_freshness_audit(market, checked_at=_utc(observed_at))
         if not isinstance(market, dict) or market.get("ticker") != ticker \
                 or market.get("status") not in ("open", "active"):
             result = estimate_exit(position, market, None, requested, observed_at)
+            result.update(market_age)
             result["lookup_status"] = "MARKET METADATA ONLY — NO ORDERBOOK"
             return result
         book = book_fetch(ticker)
         result = estimate_exit(position, market, book, requested, observed_at)
+        result.update(market_age)
+        series_ticker = ticker.split("-", 1)[0]
+        fee_meta = series_fee_audit({}, series_ticker=series_ticker)
+        if series_fetch is not None:
+            try:
+                fee_meta = series_fee_audit(series_fetch(series_ticker),
+                                            series_ticker=series_ticker)
+            except Exception:
+                fee_meta["series_fee_metadata_status"] = "PUBLIC SERIES FEE LOOKUP FAILED"
+        result.update(fee_meta)
         result["lookup_status"] = "PUBLIC ORDERBOOK RETURNED"
         return result
     except Exception as exc:
@@ -260,6 +274,10 @@ def snapshot_integrity(snapshot, position, *, now=None, requested_shares=None):
             return False, "Kalshi public lookup failed — no current order-book evidence"
         if lookup == "MARKET METADATA ONLY — NO ORDERBOOK":
             return False, "Market metadata checked, but no sell-side order book retrieved"
+        if snapshot.get("market_metadata_status") in (
+                "STALE MARKET METADATA",
+                "INCONSISTENT — FUTURE MARKET UPDATE"):
+            return False, "Market metadata is stale or inconsistent — no current quote claim"
         checked = _utc(snapshot.get("checked_utc"))
         at = _utc(now)
         elapsed = (at - checked).total_seconds()
