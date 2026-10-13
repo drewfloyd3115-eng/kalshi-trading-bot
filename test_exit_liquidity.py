@@ -221,6 +221,60 @@ class ExitDepthTests(unittest.TestCase):
         self.assertIsNone(response["gross_proceeds_usd"])
         self.assertIn("No resting bids", response["reason"])
 
+    def test_public_series_metadata_does_not_certify_fees(self):
+        updated = (self.now - timedelta(minutes=1)).isoformat()
+        requests = []
+        def meta(ticker):
+            requests.append("market")
+            return {"ticker": ticker, "status": "open", "updated_time": updated}
+        def book(ticker):
+            requests.append("book")
+            return self.book
+        def series(ticker):
+            requests.append("series")
+            self.assertEqual(ticker, "KXNCAAFGAME")
+            return {"ticker": ticker, "fee_type": "quadratic_with_maker_fees",
+                    "fee_multiplier": 1.0}
+        result = review_public_position(
+            self.position, market_fetch=meta, book_fetch=book,
+            series_fetch=series, observed_at=self.now)
+        self.assertEqual(requests, ["market", "book", "series"])
+        self.assertEqual(result["series_fee_type"], "quadratic_with_maker_fees")
+        self.assertEqual(result["series_fee_multiplier"], 1.0)
+        self.assertFalse(result["fee_schedule_verified"])
+        self.assertEqual(result["market_metadata_status"],
+                         "RECENT MARKET METADATA — BID AGE UNKNOWN")
+        self.assertFalse(result["source_quote_age_verified"])
+        valid, _ = snapshot_integrity(result, self.position, now=self.now)
+        self.assertTrue(valid)
+
+    def test_stale_public_market_metadata_disables_freshness(self):
+        stale = (self.now - timedelta(days=8)).isoformat()
+        result = review_public_position(
+            self.position,
+            market_fetch=lambda t: {"ticker": t, "status": "active",
+                                    "updated_time": stale},
+            book_fetch=lambda t: self.book, observed_at=self.now)
+        self.assertEqual(result["covered_shares"], 4)
+        self.assertEqual(result["market_metadata_status"], "STALE MARKET METADATA")
+        okay, reason = snapshot_integrity(result, self.position, now=self.now)
+        self.assertFalse(okay)
+        self.assertIn("stale or inconsistent", reason)
+
+    def test_fee_lookup_failure_does_not_invent_fee_multiplier(self):
+        def fail(_):
+            raise OSError("series feed unavailable")
+        result = review_public_position(
+            self.position,
+            market_fetch=lambda t: {"ticker": t, "status": "open"},
+            book_fetch=lambda t: self.book,
+            series_fetch=fail,
+            observed_at=self.now)
+        self.assertFalse(result["fee_schedule_verified"])
+        self.assertIsNone(result["series_fee_multiplier"])
+        self.assertEqual(result["series_fee_metadata_status"],
+                         "PUBLIC SERIES FEE LOOKUP FAILED")
+
     def test_sort_and_aggregate_bid_levels_descending(self):
         r = _bid_levels({"yes_bids": [[50, 2], [60, 2], [60, 3]],
                          "no_bids": []}, "YES")
