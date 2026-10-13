@@ -48,6 +48,27 @@ class ExitReviewCardTests(unittest.TestCase):
         self.assertIn("NO EXIT SIGNAL", rendered)
         self.assertIn("NOT actual realized profit", rendered)
 
+    def test_market_update_age_and_series_fee_are_separately_labeled(self):
+        snapshot = {
+            "ticker": "KXNCAAFGAME-26OCT16CHSOCLEM-CHSO",
+            "side": "NO", "checked_utc": "2026-10-13T17:17:49Z",
+            "reason": "Public bid depth only",
+            "lookup_status": "PUBLIC ORDERBOOK RETURNED",
+            "requested_shares": 1, "covered_shares": 1,
+            "market_metadata_status": "STALE MARKET METADATA",
+            "market_updated_age_minutes": 11465.57,
+            "series_fee_type": "quadratic_with_maker_fees",
+            "series_fee_multiplier": 1.0,
+            "series_fee_metadata_status": "QUADRATIC + MAKER FEES — ORDER-SPECIFIC FEE UNVERIFIED",
+        }
+        html = _review_card(snapshot, False, "Market metadata is stale or inconsistent")
+        self.assertIn("STALE MARKET METADATA", html)
+        self.assertIn("11465.57 minutes", html)
+        self.assertIn("quadratic_with_maker_fees", html)
+        self.assertIn("ORDER-SPECIFIC FEE UNVERIFIED", html)
+        self.assertIn("NOT CURRENT", html)
+        self.assertIn("NO EXIT SIGNAL", html)
+
     def test_escape_quoted_metadata_and_reason(self):
         record = {
             "ticker": "<img src=x onerror=alert(1)>",
