@@ -93,6 +93,48 @@ class LiveKalshiProbeTests(unittest.TestCase):
         self.assertEqual(out["markets_probed"], 1)
         self.assertEqual(out["sportsbook_requests"], 0)
 
+    def test_explicit_no_side_live_probe_uses_no_bids(self):
+        calls = []
+        t = (self.now_for_audit() - __import__("datetime").timedelta(minutes=2)).isoformat()
+        def meta(ticker):
+            calls.append(("market", ticker))
+            return {"ticker": ticker, "status": "active", "updated_time": t}
+        def book(ticker):
+            calls.append(("book", ticker))
+            return {"yes_bids": [[92, 15]], "no_bids": [[43, 4]]}
+        def series(ticker):
+            calls.append(("series", ticker))
+            return {"ticker": ticker, "fee_type": "quadratic_with_maker_fees",
+                    "fee_multiplier": 1}
+        out = run_probe(
+            market_source=lambda leagues, pages: self.sample(),
+            metadata_source=meta, orderbook_source=book,
+            side_preference="NO", series_source=series)
+        self.assertEqual(out["requested_held_side"], "NO")
+        self.assertEqual(out["side"], "NO")
+        self.assertEqual(out["league"], "CFB")
+        self.assertEqual(out["best_bid_cents"], 43)
+        self.assertEqual(out["covered_shares"], 1)
+        self.assertIn("BOOK_PARSED", out["status"])
+        self.assertEqual(out["series_fee_type"], "quadratic_with_maker_fees")
+        self.assertEqual(out["series_fee_multiplier"], 1)
+        self.assertFalse(out["fee_schedule_verified"])
+        self.assertFalse(out["orderbook_level_age_verified"])
+        self.assertEqual([x[0] for x in calls], ["market", "book", "series"])
+
+    @staticmethod
+    def now_for_audit():
+        from datetime import datetime, timezone
+        return datetime.now(timezone.utc)
+
+    def test_no_side_candidate_requires_positive_no_bid(self):
+        choices = prioritize_markets(self.sample(), side_preference="NO")
+        self.assertEqual(len(choices), 2)
+        self.assertTrue(all(x["side"] == "NO" for x in choices))
+        self.assertEqual(choices[0]["ticker"], "KXNCAAFGAME-26OCT13CC-DD")
+        with self.assertRaises(ValueError):
+            prioritize_markets(self.sample(), side_preference="WRONG")
+
     def test_empty_held_side_book_remains_unverified(self):
         out = run_probe(market_source=lambda l, p: self.sample().head(1),
                         metadata_source=lambda t: {"ticker": t, "status": "open"},
