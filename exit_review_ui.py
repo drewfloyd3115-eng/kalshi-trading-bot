@@ -5,6 +5,7 @@ button click requests Kalshi public market metadata and one order book.
 No sportsbook API requests, automated sells or assumed fills.
 """
 from html import escape
+from urllib.parse import quote
 
 import pandas as pd
 import streamlit as st
@@ -13,6 +14,7 @@ from exit_liquidity import (
     MAX_REVIEW_SHARES, review_public_position, snapshot_integrity
 )
 from position_ledger import open_positions
+from scanner import _get
 
 
 def _usd(value):
@@ -50,6 +52,18 @@ def _review_card(snapshot, integrity_ok, integrity_reason):
     pnl = _usd(snapshot.get("hypothetical_net_pnl_usd"))
     reason = escape(str(snapshot.get("reason") or "Verification unavailable"))
     validity = escape(str(integrity_reason))
+    market_meta = escape(str(snapshot.get("market_metadata_status") or
+                             "UNKNOWN — NO MARKET UPDATE TIMESTAMP"))
+    market_age = snapshot.get("market_updated_age_minutes")
+    updated_age = ("—" if market_age is None
+                   else escape(str(market_age)) + " minutes")
+    fee_type = escape(str(snapshot.get("series_fee_type") or "UNKNOWN"))
+    fee_multiplier = snapshot.get("series_fee_multiplier")
+    multiplier_display = ("—" if fee_multiplier is None
+                          else escape(str(fee_multiplier)))
+    fee_status = escape(str(snapshot.get("series_fee_metadata_status") or
+                            "UNVERIFIED — NO SERIES FEE METADATA"))
+
     provenance = str(snapshot.get("lookup_status") or "SOURCE UNVERIFIED")
     if provenance == "REJECTED BEFORE LOOKUP":
         freshness = "NO PUBLIC LOOKUP"
@@ -88,6 +102,10 @@ def _review_card(snapshot, integrity_ok, integrity_reason):
       <strong>{freshness}</strong>
       <span>Source bid age and execution remain unverified</span></div>
   </div>
+  <div class="kl-port-muted"><b>Market metadata update:</b> {market_meta}
+    (age: {updated_age}). The age of individual resting bids remains unknown.</div>
+  <div class="kl-port-muted" style="margin-top:7px"><b>Series fee fields:</b>
+    {fee_type} · multiplier {multiplier_display} · {fee_status}</div>
   <div class="kl-port-muted"><b>Lookup result:</b> {escape(provenance)}</div>
   <div class="kl-port-muted"><b>Depth / market:</b> {reason}</div>
   <div class="kl-port-muted" style="margin-top:7px"><b>Snapshot integrity:</b> {validity}</div>
@@ -102,9 +120,10 @@ def render_exit_review(ledger):
     """No network calls until Review button is manually clicked."""
     positions = open_positions(ledger)
     st.markdown("#### Review Open Positions — sell-side depth")
-    st.caption("Independent of the new-buy scanner. Uses Kalshi PUBLIC market "
-               "metadata and order-book GET requests only when you tap Review. "
-               "No sportsbook API credits, auto-trades, or background checks.")
+    st.caption("Independent of the new-buy scanner. Uses at most three Kalshi "
+               "PUBLIC requests (market, order book and fee metadata) only when "
+               "you tap Review. No sportsbook API credits, auto-trades, "
+               "or background checks.")
     if positions.empty:
         st.info("No open manual paper positions to review. Record a hypothetical "
                 "entry in Open paper fills first.")
@@ -144,7 +163,10 @@ def render_exit_review(ledger):
                  use_container_width=True):
         # This is the ONLY path in this UI that performs public GET requests.
         # A synthetic test ticker fails closed before making network calls.
-        result = review_public_position(row.to_dict(), requested_shares=int(qty))
+        result = review_public_position(
+            row.to_dict(), requested_shares=int(qty),
+            series_fetch=lambda ticker: _get(
+                "/series/" + quote(ticker, safe="")).get("series", {}))
         cached = st.session_state.get("exit_review_cache", {})
         cached = {pid: value for pid, value in cached.items() if pid in keys}
         cached[selected] = result
@@ -167,8 +189,8 @@ def render_exit_review(ledger):
                    "No full-exit valuation can be verified.")
     else:
         st.info("Observed held-side bids cover the requested quantity, "
-                "but source age, real execution, market-specific fees and settlement "
-                "remain UNVERIFIED. No sell signal is generated.")
+                "but individual bid age, actual execution, event fee overrides and "
+                "settlement remain UNVERIFIED. No sell signal is generated.")
 
     st.markdown(_review_card(snapshot, recent, reason), unsafe_allow_html=True)
     levels = snapshot.get("levels_used")
