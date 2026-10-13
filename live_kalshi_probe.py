@@ -13,6 +13,7 @@ from decimal import Decimal, InvalidOperation
 from urllib.parse import quote
 
 from exit_liquidity import estimate_exit, snapshot_integrity
+from market_audit import market_freshness_audit, series_fee_audit
 from scanner import SPORT_PREFIXES, _get, fetch_orderbook, fetch_sports_markets
 
 # A bounded public request budget: at most 2 event-page calls, then
@@ -20,8 +21,10 @@ from scanner import SPORT_PREFIXES, _get, fetch_orderbook, fetch_sports_markets
 MAX_CANDIDATES = 3
 
 
-def prioritize_markets(markets):
+def prioritize_markets(markets, side_preference=None):
     """Choose exact active game-winner tickers, highest indicative bid first."""
+    if side_preference not in (None, "YES", "NO"):
+        raise ValueError("Unsupported contract side")
     if markets is None or markets.empty:
         return []
     candidates = []
@@ -44,6 +47,10 @@ def prioritize_markets(markets):
         if not 0 <= yes <= 100 or not 0 <= no <= 100:
             continue
         side, bid = ("YES", yes) if yes >= no else ("NO", no)
+        if side_preference == "YES":
+            side, bid = "YES", yes
+        elif side_preference == "NO":
+            side, bid = "NO", no
         if bid <= 0:
             continue
         candidates.append({
@@ -61,18 +68,20 @@ def prioritize_markets(markets):
 
 
 def run_probe(*, market_source=fetch_sports_markets,
-              metadata_source=None, orderbook_source=fetch_orderbook):
+              metadata_source=None, orderbook_source=fetch_orderbook,
+              side_preference=None, series_source=None):
     if metadata_source is None:
         metadata_source = lambda ticker: _get(
             "/markets/" + quote(ticker, safe="")
         ).get("market", {})
     checked = datetime.now(timezone.utc)
     markets = market_source(("NFL", "CFB"), 1)
-    candidates = prioritize_markets(markets)
+    candidates = prioritize_markets(markets, side_preference=side_preference)
     report = {
         "type": "KALSHI_PUBLIC_READ_ONLY_INTEGRATION",
         "checked_utc": checked.isoformat(timespec="seconds"),
         "matches_discovered": len(candidates),
+        "requested_held_side": side_preference or "HIGHEST BID",
         "markets_probed": 0,
         "status": "NOT VERIFIED",
         "trading_disabled": True,
@@ -92,6 +101,14 @@ def run_probe(*, market_source=fetch_sports_markets,
                 errors.append("Market no longer open")
                 continue
             book = orderbook_source(ticker)
+            freshness = market_freshness_audit(metadata, checked_at=checked)
+            series = ticker.split("-", 1)[0]
+            fee_meta = series_fee_audit({}, series_ticker=series)
+            if series_source is not None:
+                try:
+                    fee_meta = series_fee_audit(series_source(series), series_ticker=series)
+                except Exception as exc:
+                    errors.append("Series metadata unavailable: " + type(exc).__name__)
             position = {
                 "league": candidate["league"],
                 "position_id": "0" * 32,  # never persisted
@@ -123,6 +140,7 @@ def run_probe(*, market_source=fetch_sports_markets,
                       else "READ_ONLY_BOOK_EMPTY — NO EXIT SIGNAL")
             report.update({
                 "status": status,
+                **freshness, **fee_meta,
                 "public_held_bid_sample": held_bids[:5],
                 "fractional_held_bid_levels": fractional_held_levels,
                 "ticker": ticker, "league": candidate["league"],
@@ -148,7 +166,9 @@ def run_probe(*, market_source=fetch_sports_markets,
 
 def main():
     try:
-        result = run_probe()
+        # One NO-side integration probe, no persistent paper positions or orders.
+        result = run_probe(side_preference="NO", series_source=lambda ticker: (
+            _get("/series/" + quote(ticker, safe="")).get("series", {})))
     except Exception as exc:
         print(json.dumps({
             "type": "KALSHI_PUBLIC_READ_ONLY_INTEGRATION",
