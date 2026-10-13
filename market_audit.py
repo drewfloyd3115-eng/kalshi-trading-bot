@@ -64,14 +64,18 @@ def series_fee_audit(series, *, series_ticker=None):
     multiplier = series.get("fee_multiplier")
     try:
         factor = Decimal(str(multiplier))
-        valid = factor.is_finite() and 0 < factor <= Decimal("1000")
+        valid = factor.is_finite() and 0 <= factor <= Decimal("1000")
     except (InvalidOperation, TypeError, ValueError):
         valid = False
         factor = None
-    if fee_type not in ("quadratic",) or not valid:
+    if not valid or fee_type not in ("quadratic", "quadratic_with_maker_fees", "flat"):
         status = "FEE TYPE OR MULTIPLIER MISSING / UNSUPPORTED"
+    elif fee_type == "flat":
+        status = "FLAT FEE — FORMULA NOT SUPPORTED; EXECUTION FEE UNVERIFIED"
+    elif fee_type == "quadratic_with_maker_fees":
+        status = "QUADRATIC + MAKER FEES — ORDER-SPECIFIC FEE UNVERIFIED"
     else:
-        status = "SERIES FEE FIELDS RECEIVED — EXECUTION FEE UNVERIFIED"
+        status = "QUADRATIC SERIES FEE — EXECUTION FEE UNVERIFIED"
     return {
         "series_fee_metadata_status": status,
         "series_fee_type": fee_type or None,
