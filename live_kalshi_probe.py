@@ -138,6 +138,13 @@ def run_probe(*, market_source=fetch_sports_markets,
                       else "READ_ONLY_BOOK_PARSED — NO EXIT SIGNAL"
                       if result["covered_shares"] == 1
                       else "READ_ONLY_BOOK_EMPTY — NO EXIT SIGNAL")
+            # A parsed public book is a schema-level success, not a current
+            # market quote when the metadata update is known to be stale.
+            if freshness["market_metadata_status"] in (
+                    "STALE MARKET METADATA",
+                    "INCONSISTENT — FUTURE MARKET UPDATE"):
+                status = status.replace(" — NO EXIT SIGNAL",
+                                        " — STALE MARKET METADATA — NO EXIT SIGNAL")
             report.update({
                 "status": status,
                 **freshness, **fee_meta,
@@ -180,10 +187,12 @@ def main():
         }, indent=2))
         return 2
     print(json.dumps(result, indent=2, default=str))
-    return 0 if result["status"] in (
-        "READ_ONLY_BOOK_PARSED — NO EXIT SIGNAL",
-        "READ_ONLY_BOOK_EMPTY — NO EXIT SIGNAL",
-    ) else 2
+    # A successful schema parse still does not imply fresh/executable quotes.
+    # Invalid books and failed requests cause a failing integration test.
+    return 0 if result["status"].startswith((
+        "READ_ONLY_BOOK_PARSED —",
+        "READ_ONLY_BOOK_EMPTY —",
+    )) else 2
 
 
 if __name__ == "__main__":
