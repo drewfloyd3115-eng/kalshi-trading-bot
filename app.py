@@ -7,6 +7,7 @@ from risk import evaluate
 from edge_engine import no_vig, assess, taker_fee
 from outside_odds import fetch_odds
 from matcher import compare, parse_time
+from ui_timezone import format_central, display_central_columns
 from team_names import normalized
 from diagnostics import diagnostics
 from coverage_funnel import coverage_funnel
@@ -193,7 +194,7 @@ elif page == "CFB Model":
 else:
     if "quick_results" in st.session_state:
         summary = st.session_state.quick_results
-        st.caption(f"Last one-tap scan UTC: {summary['time']}; free API requests remaining: {summary['remaining'] or 'unknown'}")
+        st.caption(f"Last one-tap scan (Central): {format_central(summary['time'])}; free API requests remaining: {summary['remaining'] or 'unknown'}")
         a,b,c = st.columns(3)
         a.metric("Kalshi markets", summary["markets"])
         b.metric("Sportsbook rows", summary["sportsbook_rows"])
@@ -226,7 +227,7 @@ else:
                        f"{quote_blocked} have quote or scan-quality concerns. "
                        "Settlement terms, live executable depth, and complete fees remain unverified.")
             with st.expander("Why each contract is blocked or under review"):
-                st.dataframe(latest_eligibility, hide_index=True, use_container_width=True)
+                st.dataframe(display_central_columns(latest_eligibility), hide_index=True, use_container_width=True)
         st.caption("The dashboard recalculates eligibility from cached data whenever the page reruns. "
                    "Viewing it does not use Odds API credits.")
         st.subheader("Opportunity discovery — coverage audit")
@@ -245,7 +246,7 @@ else:
             if coverage_table.empty:
                 st.info("No coverage data for this scan.")
             else:
-                st.dataframe(coverage_table, hide_index=True, use_container_width=True)
+                st.dataframe(display_central_columns(coverage_table), hide_index=True, use_container_width=True)
                 st.download_button("Download coverage audit CSV",
                     coverage_table.to_csv(index=False).encode("utf-8"),
                     file_name="kalshi_coverage_audit.csv", mime="text/csv")
@@ -262,10 +263,10 @@ else:
             pc3.metric("Gap to +5pp", f"{closest['gap_to_threshold_pp']:.2f}pp")
             best_prices = price_table[price_table["best_route_for_outcome"]].copy()
             st.caption(f"{len(best_prices)} distinct winning outcomes from {len(price_table)} contract-side routes. Order-book snapshots cover only selected outcomes; all others remain uninspected.")
-            st.dataframe(best_prices, hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(best_prices), hide_index=True, use_container_width=True)
             with st.expander("All YES/NO routes — threshold distance, book quality, depth, CSV", expanded=False):
                 st.caption("A smaller gap is not approval. Wide sportsbook disagreement and old quotes weaken confidence; verify contract fees, depth, kickoff and settlement separately.")
-                st.dataframe(price_table, hide_index=True, use_container_width=True)
+                st.dataframe(display_central_columns(price_table), hide_index=True, use_container_width=True)
                 st.download_button("Download price discovery CSV",
                     price_table.to_csv(index=False).encode("utf-8"),
                     file_name="kalshi_price_discovery.csv", mime="text/csv")
@@ -281,7 +282,7 @@ else:
         if changes.empty:
             st.info("No comparison data. No verified trade.")
         else:
-            st.caption(f"Previous completed scan: {st.session_state.get('previous_scan_time') or 'not recorded'} | Current completed scan: {summary.get('time') or 'not recorded'}")
+            st.caption(f"Previous completed scan (Central): {format_central(st.session_state.get('previous_scan_time'), missing='not recorded')} | Current completed scan (Central): {format_central(summary.get('time'), missing='not recorded')}")
             if not bool(changes["independent_scans"].iloc[0]):
                 st.warning("Two independently timestamped successful scans not confirmed. No new opportunity flags permitted.")
             if not bool(changes["scan_fresh_now"].iloc[0]):
@@ -294,7 +295,7 @@ else:
             m3.metric("Kickoff/quote blocked", int(changes["research_status"].str.startswith("BLOCKED").sum()))
             if not known.any():
                 st.caption("First successful scan in this session. Run Scan Now again later to compare price movement.")
-            st.dataframe(changes, hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(changes), hide_index=True, use_container_width=True)
             st.download_button("Download scan changes CSV", changes.to_csv(index=False).encode("utf-8"),
                                file_name="kalshi_scan_changes.csv", mime="text/csv")
         st.warning("No automatic alerts or real orders. A +5pp flag is not a verified opportunity; kickoff, quote freshness, depth, fees and rules must all be rechecked.")
@@ -360,10 +361,10 @@ else:
                         st.write("Kickoff: {} | Books: {} | Quotes: {}".format(row["kickoff_status"], row["books"], row["quote_status"]))
                     if len(group) > 1:
                         with st.expander("Other routes to the same outcome"):
-                            st.dataframe(group.drop(columns=["_event_key", "_outcome_key"]), hide_index=True, use_container_width=True)
+                            st.dataframe(display_central_columns(group.drop(columns=["_event_key", "_outcome_key"])), hide_index=True, use_container_width=True)
             ranked = ranked.drop(columns=["_event_key", "_outcome_key"])
             with st.expander("All matches and CSV export"):
-                st.dataframe(ranked, hide_index=True, use_container_width=True)
+                st.dataframe(display_central_columns(ranked), hide_index=True, use_container_width=True)
                 st.download_button("Export pregame eligibility CSV", ranked.to_csv(index=False).encode("utf-8"), file_name="kalshi_pregame_eligibility.csv", mime="text/csv")
         st.subheader("Paper scan decision")
         st.caption("Risk limits: 1% per position, 3% total exposure. Fee schedules, settlement and execution remain unverified.")
@@ -372,41 +373,41 @@ else:
         elif st.session_state.quick_depth.empty:
             st.info("NO TRADE: no candidate clears the preliminary +5pp filter.")
         else:
-            st.dataframe(st.session_state.quick_depth, hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(st.session_state.quick_depth), hide_index=True, use_container_width=True)
         with st.expander("Additional preliminary edge comparisons"):
-            st.dataframe(st.session_state.get("quick_comparisons", pd.DataFrame()), hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(st.session_state.get("quick_comparisons", pd.DataFrame())), hide_index=True, use_container_width=True)
         with st.expander("Paper scan journal — export CSV"):
             st.caption("One indicative route per winning outcome. Session-only; download the CSV to preserve it. No trades are placed and no results are settled.")
             journal = st.session_state.get("paper_scan_journal", pd.DataFrame())
-            st.dataframe(journal, hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(journal), hide_index=True, use_container_width=True)
             st.download_button("Download paper scan CSV", journal.to_csv(index=False).encode("utf-8"), file_name="kalshi_paper_scan.csv", mime="text/csv", disabled=journal.empty)
         with st.expander("Equivalent outcome routes — indicative prices only"):
             st.caption("Groups YES and NO contracts paying on the same team. Depth, settlement terms and fees are NOT verified.")
-            st.dataframe(st.session_state.get("quick_routes", pd.DataFrame()), hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(st.session_state.get("quick_routes", pd.DataFrame())), hide_index=True, use_container_width=True)
         with st.expander("Fee sensitivity and maximum entry price — estimates"):
             st.caption("Compares ten-share single-order fee with separately rounded fees and calculates the highest whole-cent ask satisfying +5pp. Assumes general taker schedule; special market fees may differ.")
-            st.dataframe(st.session_state.get("quick_fee_analysis", pd.DataFrame()), hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(st.session_state.get("quick_fee_analysis", pd.DataFrame())), hide_index=True, use_container_width=True)
         with st.expander("Order-book route comparison — paper only"):
             st.caption("Checks up to three winning outcomes, both contract routes, maximum ten shares each. Fees are estimates and no trades are verified.")
-            st.dataframe(st.session_state.get("quick_route_depth", pd.DataFrame()), hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(st.session_state.get("quick_route_depth", pd.DataFrame())), hide_index=True, use_container_width=True)
         st.caption("v1.7 sportsbook consensus: unique bookmaker IDs, same kickoff, fresh quotes and true median for even book counts.")
         st.caption("Coverage diagnostics use expanded aliases. Trade matching now requires exact opponents, event date and YES outcome label; uncertain games are excluded.")
         with st.expander("Full sportsbook coverage funnel — all games"):
             st.caption("Includes sportsbook games without matched contracts. Candidate events are not verified matches; see matched-sides metric separately.")
-            st.dataframe(st.session_state.get("quick_funnel", pd.DataFrame()), hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(st.session_state.get("quick_funnel", pd.DataFrame())), hide_index=True, use_container_width=True)
         with st.expander("Coverage diagnostics — why games were excluded"):
-            st.dataframe(st.session_state.get("quick_diagnostics", pd.DataFrame()), hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(st.session_state.get("quick_diagnostics", pd.DataFrame())), hide_index=True, use_container_width=True)
         with st.expander("Event and outcome audit — export for review"):
             st.caption("Possible game/event matches only. Outcome and settlement rules are not independently verified.")
-            st.dataframe(st.session_state.get("quick_event_audit", pd.DataFrame()), hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(st.session_state.get("quick_event_audit", pd.DataFrame())), hide_index=True, use_container_width=True)
         with st.expander("Quote rejection audit — matched games"):
             st.caption("Counts stale/future, kickoff mismatch, outcome mismatch, duplicate book and invalid odds for games with at least two valid books. Excluded games remain absent.")
-            st.dataframe(st.session_state.quick_comparisons[[c for c in ["event","ticker","side","books","rejected_quotes","rejection_breakdown"] if c in st.session_state.quick_comparisons.columns]], hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(st.session_state.quick_comparisons[[c for c in ["event","ticker","side","books","rejected_quotes","rejection_breakdown"] if c in st.session_state.quick_comparisons.columns]]), hide_index=True, use_container_width=True)
         with st.expander("Sportsbook probability quality audit"):
             st.caption("Per-book no-vig estimates, consensus spread, and oldest quote age. A wide spread signals disagreement, not confirmed value.")
-            st.dataframe(st.session_state.quick_comparisons, hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(st.session_state.quick_comparisons), hide_index=True, use_container_width=True)
         with st.expander("Preliminary matched comparisons"):
-            st.dataframe(st.session_state.quick_comparisons, hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(st.session_state.quick_comparisons), hide_index=True, use_container_width=True)
         st.warning("NO VERIFIED TRADE. Quotes and fees are estimates; injury/news, settlement rules and final synchronization are not validated. No orders placed.")
     scan, odds_tab, edge_tab, evaluate_tab, queue_tab = st.tabs(["Market scan", "Outside odds", "Edge lab", "Evaluate", "Paper queue"])
 
@@ -488,7 +489,7 @@ else:
         st.caption("Edge filter: "+diagnosis["edge_filter"]+". The +5pp requirement is not a trade approval. No extra sportsbook requests were made.")
         st.markdown("**Contract inspection summary**")
         st.write(contract_label(str(v.get("ticker",""))))
-        st.caption("Side: "+str(v.get("side",""))+" | Kickoff: "+str(v.get("kickoff_utc") or "Unverified")+" | Timing: "+str(v.get("pregame_timing","UNKNOWN")))
+        st.caption("Side: "+str(v.get("side",""))+" | Kickoff (Central): "+format_central(v.get("kickoff_utc"))+" | Timing: "+str(v.get("pregame_timing","UNKNOWN")))
         a,b=st.columns(2)
         a.metric("Best depth ask",str(v.get("best_ask_cents"))+"¢" if v.get("best_ask_cents") is not None else "N/A")
         b.metric("Available shares",v.get("shares_available",0))
@@ -530,7 +531,7 @@ else:
     else:
         st.info("No closed paper positions. Win rate and hypothetical P&L are not available.")
     with st.expander("Paper history records — offline"):
-        st.dataframe(history,hide_index=True,use_container_width=True)
+        st.dataframe(display_central_columns(history), hide_index=True, use_container_width=True)
     st.download_button("Download combined paper history CSV",history.to_csv(index=False).encode("utf-8"),file_name="kalshi_paper_history.csv",mime="text/csv",disabled=history.empty)
     st.caption("CSV history is session-only until downloaded. Paper fills require independent price/depth verification; settled results require external confirmation. No real orders.")
     st.divider()
@@ -550,7 +551,7 @@ else:
                 except Exception as exc:
                     st.error(f"Market feed unavailable: {exc}")
         if "markets" in st.session_state:
-            st.caption(f"Retrieved (UTC): {st.session_state.snapshot_at}. Results are limited by pages and ticker filters; not exhaustive.")
+            st.caption(f"Retrieved (Central): {format_central(st.session_state.snapshot_at)}. Results are limited by pages and ticker filters; not exhaustive.")
             df = st.session_state.markets
             if df.empty:
                 st.info("No matching markets found. Sports tickers may have changed, or more pages may be needed.")
@@ -559,7 +560,7 @@ else:
                 query = st.text_input("Search teams, title or ticker")
                 if query:
                     df = df[df["title"].str.contains(query, case=False, na=False) | df["ticker"].str.contains(query, case=False, na=False)]
-                st.dataframe(df, hide_index=True, use_container_width=True)
+                st.dataframe(display_central_columns(df), hide_index=True, use_container_width=True)
         st.divider()
         st.subheader("Order-book lookup")
         depth_ticker = st.text_input("Exact Kalshi market ticker for depth")
@@ -591,8 +592,8 @@ else:
             except Exception as exc:
                 st.error(str(exc))
         if "outside_odds" in st.session_state:
-            st.caption(f"Retrieved UTC: {st.session_state.odds_at}; free API requests remaining: {st.session_state.odds_remaining or 'unknown'}")
-            st.dataframe(st.session_state.outside_odds, hide_index=True, use_container_width=True)
+            st.caption(f"Retrieved (Central): {format_central(st.session_state.odds_at)}; free API requests remaining: {st.session_state.odds_remaining or 'unknown'}")
+            st.dataframe(display_central_columns(st.session_state.outside_odds), hide_index=True, use_container_width=True)
         st.divider()
         st.subheader("Match sportsbook lines to Kalshi")
         st.caption("Pregame moneylines only. Requires at least two independent, recently updated sportsbooks and an unambiguous team match.")
@@ -607,7 +608,7 @@ else:
                         st.warning("NO VERIFIED EDGE: no safe matches. This may reflect missing team-name mappings, started games or stale odds.")
                     else:
                         st.metric("Preliminary comparisons", len(matched))
-                        st.dataframe(matched, hide_index=True, use_container_width=True)
+                        st.dataframe(display_central_columns(matched), hide_index=True, use_container_width=True)
                         st.warning("These are preliminary one-share estimates only. Liquidity, precise fees, line movement, injuries and immediate rechecks are NOT validated. DO NOT EXECUTE.")
                 except Exception as exc:
                     st.error(f"Matching failed: {exc}")
@@ -633,7 +634,7 @@ else:
                         if results.empty:
                             st.info("NO TRADE: no preliminary match clears +5pp to warrant liquidity lookup.")
                         else:
-                            st.dataframe(results, hide_index=True, use_container_width=True)
+                            st.dataframe(display_central_columns(results), hide_index=True, use_container_width=True)
                         st.warning("PAPER RESEARCH ONLY. Fees are estimated; injury status, market rules and fully synchronized sportsbook quotes remain unverified. No orders placed.")
                 except Exception as exc:
                     st.error(f"Integrated scan failed: {exc}")
@@ -673,7 +674,7 @@ else:
                 results = assess(yes_odds, no_odds, yes_ask, no_ask, edge_bankroll,
                                  total_research_exposure(edge_exposure),
                                  fee_multiplier, yes_depth, no_depth)
-                st.dataframe(pd.DataFrame(results), hide_index=True, use_container_width=True)
+                st.dataframe(display_central_columns(pd.DataFrame(results)), hide_index=True, use_container_width=True)
                 st.info("PAPER CANDIDATE is conditional, not BUY. Recheck all inputs immediately before acting.")
             except Exception as exc:
                 st.error(f"Cannot evaluate: {exc}")
@@ -710,7 +711,7 @@ else:
 
     with queue_tab:
         st.write("Session-only approvals. Refreshing or restarting the app may erase them.")
-        st.dataframe(pd.DataFrame(st.session_state.queue), hide_index=True, use_container_width=True)
+        st.dataframe(display_central_columns(pd.DataFrame(st.session_state.queue)), hide_index=True, use_container_width=True)
         st.metric("Approved paper exposure", f"${st.session_state.paper_exposure:.2f}")
         if st.button("Clear paper queue"):
             st.session_state.queue = []
