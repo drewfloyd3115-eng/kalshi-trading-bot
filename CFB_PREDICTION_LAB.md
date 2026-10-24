@@ -71,3 +71,13 @@ No quote history supplied => **no historical ROI claims**.
 - Kalshi event outcome, status, time, and fee schedule must be manually verified.
 - No historical backtest claims until actual CFBD data and historical prices are loaded.
 - No guarantee of profitability. Paper trial with prospective locked predictions first.
+
+
+## Upcoming matchups (new)
+1. On **CFB Model**, tap **Load 2020–2026 public FBS scores** to establish real historical scores and the corresponding ESPN team-ID mapping.
+2. Tap **Load upcoming 8 days of FBS games**. The model makes one read-only, user-initiated request to ESPN's public FBS scoreboard; no key or extra AI service is needed.
+3. The upcoming table includes only future pregame events with exact ESPN team IDs matching the FBS historical results. Unknown, started or malformed games are excluded. No fuzzy team-name matching.
+4. Inspect projected margin, total and win probability under **Upcoming matchups**. These are uncalibrated baseline forecasts, **not verified positive-EV picks**.
+5. ESPN's scoreboard is an undocumented third-party API and might become unavailable. Public game results can omit or misclassify fixtures. An empty or failed schedule does not imply no FBS games exist.
+
+The public results source also lacks 2022. Its missing season is not filled or inferred. Historical profitability remains unproven; no betting or order placement is enabled.

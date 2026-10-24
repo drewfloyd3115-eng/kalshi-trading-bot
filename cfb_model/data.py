@@ -100,6 +100,24 @@ def parse_public_games_csv(content: str) -> pd.DataFrame:
         raise ValueError("Public scoreboard missing fields: " + ", ".join(sorted(required-set(df.columns))))
     df = df.loc[df.home_level.astype(str).str.lower().eq("fbs") &
                 df.away_level.astype(str).str.lower().eq("fbs")].copy()
+    # Collect stable ESPN numeric team IDs from the SAME filtered FBS data.
+    # A numeric ID with conflicting recorded team names is considered ambiguous.
+    id_names: dict[str, set[str]] = {}
+    if {"home_id", "away_id"}.issubset(df.columns):
+        for side in ("home", "away"):
+            for raw_id, team in zip(df[f"{side}_id"], df[f"{side}_team"]):
+                try:
+                    numeric_id = pd.to_numeric(raw_id, errors="coerce")
+                    if pd.isna(numeric_id) or float(numeric_id) != int(numeric_id):
+                        continue
+                    tid = str(int(numeric_id))
+                    name = str(team).strip()
+                    if name and name.lower() != "nan":
+                        id_names.setdefault(tid, set()).add(name)
+                except (TypeError, ValueError, OverflowError):
+                    continue
+    stable_ids = {tid: next(iter(names)) for tid, names in id_names.items() if len(names) == 1}
+    ambiguous_ids = [tid for tid, names in id_names.items() if len(names) > 1]
     # No final-status field in this source: withhold recent games even if scores
     # appear, so in-progress numbers cannot become training results.
     kickoff = pd.to_datetime(df.start_date,utc=True,errors="coerce")
@@ -113,7 +131,10 @@ def parse_public_games_csv(content: str) -> pd.DataFrame:
         "home_points":df["home_points"].where(completed),
         "away_points":df["away_points"].where(completed),
         "completed":completed, "neutral_site":df["neutral_site"]})
-    return normalize_games(converted)
+    result = normalize_games(converted)
+    result.attrs["espn_team_ids"] = stable_ids
+    result.attrs["ambiguous_espn_ids"] = ambiguous_ids
+    return result
 
 
 def fetch_public_years(start: int = 2020, end: int = 2026, session=None) -> pd.DataFrame:
@@ -139,7 +160,18 @@ def fetch_public_years(start: int = 2020, end: int = 2026, session=None) -> pd.D
         parts.append(part)
     if not parts:
         raise ValueError(f"No actual FBS games available for requested seasons {start}–{end}")
+    # Cross-year team-name conflicts invalidate an ID instead of guessing.
+    names_by_id: dict[str, set[str]] = {}
+    invalid_ids = set()
+    for part in parts:
+        invalid_ids.update(part.attrs.get("ambiguous_espn_ids", []))
+        for tid, name in part.attrs.get("espn_team_ids", {}).items():
+            names_by_id.setdefault(tid, set()).add(name)
+    stable_ids = {tid: next(iter(names)) for tid, names in names_by_id.items()
+                  if tid not in invalid_ids and len(names) == 1}
     result=normalize_games(pd.concat(parts,ignore_index=True))
+    result.attrs["espn_team_ids"] = stable_ids
+    result.attrs["ambiguous_espn_ids"] = sorted(set(names_by_id) - set(stable_ids))
     result.attrs["missing_seasons"] = missing
     result.attrs["source"] = "jackwarfield/cfb_rankings (public third-party scoreboard)"
     return result
