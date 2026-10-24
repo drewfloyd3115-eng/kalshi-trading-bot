@@ -96,3 +96,8 @@ After loading the public score history and the upcoming ESPN scoreboard, **Model
 - If favorite/home direction is ambiguous, the market spread is withheld rather than applying a potentially reversed line.
 - No transaction price, sportsbook vig, fee-adjusted edge, liquidity, odds or Kalshi settlement eligibility is inferred from an ESPN spread or total.
 - Every mismatch is a **research lead only**. Validate injuries, lines, game clocks, model calibration, and contract rules before any real-money use. All live order placement remains disabled.
+
+
+## Display time zone
+
+The CFB Model's kickoff selector, upcoming slate, market comparison and snapshot labels use Central Time (`America/Chicago`; CDT or CST as appropriate). The app does **not** change game kickoff instants, eligibility checks or source timestamps. Exported history/prediction CSVs deliberately retain UTC for reproducible replay.
