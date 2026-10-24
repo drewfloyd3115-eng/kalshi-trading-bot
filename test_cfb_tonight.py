@@ -31,6 +31,21 @@ def schedule(when="2026-10-25T00:00:00Z", home="Alpha",away="Beta", eid="900",
 NOW="2026-10-24T21:24:00Z"  # 4:24 PM CDT, same Saturday as user's request
 
 
+def enough_history():
+    rows=[]
+    for i in range(305):
+        rows.append({
+            "game_id":f"history-{i}","season":2020+i//100,"week":1+i%15,
+            "kickoff_utc":(pd.Timestamp("2020-08-01T13:00:00Z")+
+                           pd.Timedelta(days=i)).isoformat(),
+            "home_team":"Alpha" if i%2 else "Beta",
+            "away_team":"Beta" if i%2 else "Alpha",
+            "home_points":24+i%21,"away_points":13+i%17,
+            "completed":True,"neutral_site":False
+        })
+    return pd.DataFrame(rows)
+
+
 class TonightCFBTests(unittest.TestCase):
     def test_valid_after_five_central_appears_research_only(self):
         # Build 305 real synthetic previous fixtures to exercise the history
@@ -55,6 +70,48 @@ class TonightCFBTests(unittest.TestCase):
                                board.iloc[0]["projected_home_margin"]+9.5,places=1)
         self.assertTrue(board.iloc[0]["matchup"].startswith("Beta @ Alpha"))
         self.assertNotIn("roi",board.columns)
+
+    def test_model_quality_does_not_depend_on_fresh_market(self):
+        h=enough_history()
+        ref=schedule()
+        ref.attrs["indicative_market"].loc[0,"market_verification"]="UNVERIFIED ESPN SCOREBOARD SNAPSHOT"
+        no_book=tonight_slate(h,ref,now=NOW)
+        self.assertEqual(no_book.iloc[0].market_source_label,"ESPN REFERENCE")
+        self.assertIn(no_book.iloc[0].research_confidence,("PRELIMINARY","LOW"))
+        self.assertNotEqual(no_book.iloc[0].research_confidence,"UNVERIFIED")
+        self.assertEqual(no_book.iloc[0].decision,"PASS — NO VERIFIED POSITIVE EV")
+        book=pd.DataFrame([{
+            "game_id":"espn-900", "market_home_handicap":9.5,
+            "market_total":None, "market_provider":"DraftKings",
+            "market_verification":"ODDS_API_FRESH","market_book_count":2,
+            "market_oldest_quote_minutes":2
+        }])
+        verified=tonight_slate(h,ref,now=NOW,fresh_market=book)
+        self.assertEqual(verified.iloc[0].market_source_label,"INDEPENDENT BOOK")
+        self.assertEqual(verified.iloc[0].research_confidence,
+                         no_book.iloc[0].research_confidence)
+
+    def test_partial_book_match_keeps_other_games_espn_references(self):
+        h=enough_history()
+        fixture=schedule()
+        other=schedule(home="Beta",away="Alpha",eid="901")
+        both=pd.concat([fixture,other],ignore_index=True)
+        both.attrs=dict(fixture.attrs)
+        both.attrs["indicative_market"]=pd.concat([
+            fixture.attrs["indicative_market"],
+            other.attrs["indicative_market"]],ignore_index=True)
+        both.attrs["indicative_market"]["market_verification"] = (
+            "UNVERIFIED ESPN SCOREBOARD SNAPSHOT")
+        book=pd.DataFrame([{
+            "game_id":"espn-900","market_home_handicap":8.5,
+            "market_total":None,"market_provider":"DraftKings",
+            "market_verification":"ODDS_API_FRESH","market_book_count":2,
+            "market_oldest_quote_minutes":1
+        }])
+        result=tonight_slate(h,both,now=NOW,fresh_market=book).set_index("game_id")
+        self.assertEqual(result.loc["espn-900","market_source_label"],"INDEPENDENT BOOK")
+        self.assertEqual(result.loc["espn-901","market_source_label"],"ESPN REFERENCE")
+        self.assertEqual(result.loc["espn-901","market_home_handicap"],9.5)
 
     def test_started_or_pre_five_pm_central_excluded(self):
         base=source_games()
