@@ -99,8 +99,14 @@ def parse_schedule_events(payload: dict, id_to_name: dict, now=None) -> pd.DataF
 
 def fetch_upcoming_schedule(id_to_name: dict, now=None, days: int = 7,
                             session=None) -> pd.DataFrame:
-    """One bounded scoreboard GET for the next 1–14 days. No API key."""
-    if not isinstance(days, int) or days < 1 or days > 14:
+    """Fetch an 8-day horizon through separate, single-date ESPN scoreboards.
+
+    ESPN discontinued DATE-RANGE requests for team-sport scoreboards in 2026:
+    dates=YYYYMMDD-YYYYMMDD yields 400; YYYYMMDD still works.
+    We combine bounded daily results, deduplicate exact ESPN event IDs, and
+    reject the entire fetch when any day fails. No fabricated partial schedule.
+    """
+    if not isinstance(days, int) or isinstance(days, bool) or days < 1 or days > 14:
         raise ValueError("Days must be 1–14")
     now = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
     if now.tzinfo is None:
@@ -108,9 +114,35 @@ def fetch_upcoming_schedule(id_to_name: dict, now=None, days: int = 7,
     now = now.tz_convert("UTC")
     end = now + pd.Timedelta(days=days)
     client = session or requests
-    response = client.get(ESPN_SCOREBOARD, params={
-        "dates": f"{now:%Y%m%d}-{end:%Y%m%d}",
-        "groups": "80", "limit": 500
-    }, timeout=25)
-    response.raise_for_status()
-    return parse_schedule_events(response.json(), id_to_name, now=now)
+    events_by_id = {}
+    dates_checked = []
+    # A rolling N*24 hour horizon can touch N+1 distinct UTC calendar dates.
+    for day in pd.date_range(now.normalize(), end.normalize(), freq="D"):
+        date_string = day.strftime("%Y%m%d")
+        response = client.get(ESPN_SCOREBOARD, params={
+            "dates": date_string, "groups": "80", "limit": 500
+        }, timeout=25)
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("events"), list):
+            raise ValueError(f"Invalid ESPN scoreboard for {date_string}; no partial schedule")
+        for event in payload["events"]:
+            if not isinstance(event, dict):
+                continue
+            eid = str(event.get("id") or "").strip()
+            if eid:
+                # Multiple daily scoreboards can contain the same fixture.
+                events_by_id.setdefault(eid, event)
+        dates_checked.append(date_string)
+    if not events_by_id:
+        raise ValueError(f"ESPN returned no games for the next {days} days")
+    # Respect the precise rolling horizon, not just the inclusive calendar dates.
+    filtered = []
+    for event in events_by_id.values():
+        kickoff = pd.to_datetime(event.get("date"), utc=True, errors="coerce")
+        if pd.notna(kickoff) and now < kickoff <= end:
+            filtered.append(event)
+    result = parse_schedule_events({"events": filtered}, id_to_name, now=now)
+    result.attrs["dates_checked"] = dates_checked
+    result.attrs["requested_days"] = days
+    return result
