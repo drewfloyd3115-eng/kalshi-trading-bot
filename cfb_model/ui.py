@@ -8,6 +8,7 @@ from .core import walk_forward, Forecast
 from .data import read_games_csv, fetch_years, fetch_public_years, COLUMNS
 from .backtest import score_predictions
 from .value import evaluate, from_orderbook, taker_fee
+from ui_timezone import format_central, display_central_columns
 
 
 def _key():
@@ -19,6 +20,7 @@ def _key():
 
 def render_model_ui():
     st.title("CFB Prediction Lab")
+    st.caption("All times displayed in Central Time (CDT/CST). UTC is retained in downloaded research files.")
     st.caption("Historical-results baseline · independently tested forecasts · PAPER ONLY · no orders")
     st.warning("This baseline has NOT demonstrated a profitable edge. Incomplete data, a kickoff already passed, unverified contract rules, or stale quotes must result in PASS.")
     source=st.radio("Real-game data source",["Public FBS scores (no key)","Upload existing CFBD CSV","Fetch from CollegeFootballData"],horizontal=False)
@@ -125,7 +127,7 @@ def render_model_ui():
         return
     shown=upcoming[["kickoff_utc","away_team","home_team","projected_home_margin","projected_total","home_win_prob","training_games"]].copy()
     shown.home_win_prob=(shown.home_win_prob*100).round(1)
-    st.dataframe(shown,hide_index=True,use_container_width=True)
+    st.dataframe(display_central_columns(shown),hide_index=True,use_container_width=True)
     st.download_button("Download upcoming projections CSV",upcoming.to_csv(index=False).encode("utf-8"),file_name="cfb_upcoming_projections.csv",mime="text/csv")
     st.subheader("Model versus market — indicative research")
     st.caption("ESPN's public scoreboard sometimes includes sportsbook lines. These are optional, unverified and not executable Kalshi quotes. Discrepancy is a point difference, NOT betting expected value.")
@@ -142,7 +144,7 @@ def render_model_ui():
                 spread_count=int(comparisons.market_home_handicap.notna().sum())
                 total_count=int(comparisons.market_total.notna().sum())
                 st.caption(f"{spread_count} market spreads and {total_count} totals with verified matchup IDs. Quotes have NOT been checked for executable price, injury changes, sportsbook fees or official settlement rules.")
-                st.dataframe(comparisons,hide_index=True,use_container_width=True)
+                st.dataframe(display_central_columns(comparisons),hide_index=True,use_container_width=True)
                 st.download_button("Download indicative market comparison CSV",
                     comparisons.to_csv(index=False).encode("utf-8"),
                     file_name="cfb_market_discrepancies.csv",mime="text/csv")
@@ -153,7 +155,7 @@ def render_model_ui():
             st.info("ESPN did not provide a usable sportsbook line snapshot. No market comparisons or bets can be inferred.")
     else:
         st.info("Load an upcoming schedule to check whether any indicative market lines are available.")
-    choices={f"{r.away_team} @ {r.home_team} — {r.kickoff_utc:%b %d, %I:%M %p} UTC [{r.game_id}]":r.game_id for _,r in upcoming.iterrows()}
+    choices={f"{r.away_team} @ {r.home_team} — {format_central(r.kickoff_utc)} [{r.game_id}]":r.game_id for _,r in upcoming.iterrows()}
     selected=st.selectbox("Evaluate one game",list(choices))
     r=upcoming[upcoming.game_id==choices[selected]].iloc[0]
     fc=Forecast(float(r.projected_home_margin),float(r.projected_total),float(r.home_win_prob),float(r.margin_sigma),float(r.total_sigma),int(r.training_games),int(r.home_sample),int(r.away_sample))
@@ -197,8 +199,8 @@ def render_model_ui():
     st.write("Market title:",metadata.get("title","Missing"))
     st.write("YES means:",metadata.get("yes_sub_title","Review exact Kalshi rules"))
     st.write("Rules:",metadata.get("rules_primary","See Kalshi market details"))
-    st.caption("Market status: {} · Retrieved UTC: {}".format(metadata.get("status","UNKNOWN"),snapshot["fetched"]))
-    st.json({k:metadata.get(k) for k in ("fee_type","fee_multiplier","updated_time","close_time")})
+    st.caption("Market status: {} · Retrieved (Central): {}".format(metadata.get("status","UNKNOWN"),format_central(snapshot["fetched"])))
+    st.json({k:(format_central(metadata.get(k)) if k in ("updated_time","close_time") else metadata.get(k)) for k in ("fee_type","fee_multiplier","updated_time","close_time")})
     depth=from_orderbook(snapshot["book"],side,int(shares))
     st.write("Book analysis:",depth)
     seen_at=pd.to_datetime(snapshot["fetched"],utc=True)
