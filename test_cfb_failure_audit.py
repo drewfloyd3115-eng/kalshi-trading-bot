@@ -52,7 +52,7 @@ class CFBAuditTests(unittest.TestCase):
         self.assertEqual(t.loc["Under 3","games"],1)
         self.assertEqual(t.loc["7–13.5","games"],1)
         worse=result["largest_spread_failures"]
-        self.assertEqual(worse.iloc[0].game_id,"100")
+        self.assertEqual(worse.iloc[0].home_team,"Home A")
         self.assertGreater(worse.iloc[0].book_advantage_points,0)
 
     def test_missing_total_is_not_fabricated(self):
