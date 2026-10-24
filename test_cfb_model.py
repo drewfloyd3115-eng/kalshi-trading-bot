@@ -84,12 +84,12 @@ class ModelTests(unittest.TestCase):
         """Regression: the upstream 2022 CSV is currently header-only."""
         from unittest.mock import Mock
         header=('id,season,week,start_date,neutral_site,home_team,away_team,'
-                'home_points,away_points,home_level,away_level\\n')
+                'home_points,away_points,home_level,away_level\n')
         def response(url,timeout):
             year=int(url.split('games')[-1].split('.csv')[0])
             text=header
             if year != 2022:
-                text+=f"game-{year},{year},1,{year}-09-03T16:00:00Z,False,Alpha,Beta,24,10,fbs,fbs\\n"
+                text+=f"game-{year},{year},1,{year}-09-03T16:00:00Z,False,Alpha,Beta,24,10,fbs,fbs\n"
             obj=Mock()
             obj.text=text
             return obj
@@ -104,7 +104,7 @@ class ModelTests(unittest.TestCase):
         from unittest.mock import Mock
         mock=Mock()
         mock.get.return_value.text=('id,season,week,start_date,neutral_site,'
-          'home_team,away_team,home_points,away_points,home_level,away_level\\n')
+          'home_team,away_team,home_points,away_points,home_level,away_level\n')
         with self.assertRaisesRegex(ValueError,'No actual FBS games'):
             fetch_public_years(2022,2022,session=mock)
 
@@ -112,8 +112,8 @@ class ModelTests(unittest.TestCase):
         from unittest.mock import Mock
         mock=Mock()
         mock.get.return_value.text=('id,season,week,start_date,neutral_site,'
-          'home_team,away_team,home_points,away_points,home_level,away_level\\n'
-          'one,2021,1,2021-09-01T16:00:00Z,False,Alpha,Beta,24,10,fbs,fbs\\n')
+          'home_team,away_team,home_points,away_points,home_level,away_level\n'
+          'one,2021,1,2021-09-01T16:00:00Z,False,Alpha,Beta,24,10,fbs,fbs\n')
         with self.assertRaisesRegex(ValueError,'another season'):
             fetch_public_years(2022,2022,session=mock)
 
