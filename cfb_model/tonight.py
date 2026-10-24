@@ -9,6 +9,7 @@ from __future__ import annotations
 import pandas as pd
 
 from .core import walk_forward
+from .sim_preview import simulate_preview, research_confidence
 from .data import COLUMNS, normalize_games
 from ui_timezone import CENTRAL
 
@@ -17,8 +18,13 @@ BOARD_COLUMNS = [
     "projected_home_score", "projected_home_margin", "projected_total",
     "home_win_probability_pct", "training_games", "home_sample", "away_sample",
     "market_home_handicap", "market_total", "spread_disagreement_points",
-    "total_disagreement_points", "market_provider", "caution",
-    "decision"
+    "total_disagreement_points", "market_provider", "market_verification",
+    "market_book_count", "market_oldest_quote_minutes", "caution",
+    "decision", "home_team", "away_team", "home_espn_id", "away_espn_id",
+    "margin_sigma", "total_sigma", "research_confidence", "confidence_color",
+    "confidence_reason", "simulations", "sim_home_win_pct","sim_away_win_pct",
+    "sim_home_cover_pct", "sim_over_pct", "sim_margin_p10", "sim_margin_p90",
+    "sim_total_p10", "sim_total_p90"
 ]
 
 
@@ -30,7 +36,7 @@ def _as_of(now=None) -> pd.Timestamp:
 
 
 def tonight_slate(games: pd.DataFrame, schedule: pd.DataFrame, now=None,
-                  evening_hour: int = 17) -> pd.DataFrame:
+                  evening_hour: int = 17, fresh_market=None) -> pd.DataFrame:
     """Only not-started games on the current Chicago calendar date.
 
     History is not replaced with a synthetic schedule or sportsbook projections.
@@ -79,7 +85,7 @@ def tonight_slate(games: pd.DataFrame, schedule: pd.DataFrame, now=None,
         return pd.DataFrame(columns=BOARD_COLUMNS)
     # Optional market metadata is a RETRIEVAL-TIME UNVERIFIED ESPN snapshot;
     # it is never proof that an offer was executable or accurately timestamped.
-    market = schedule.attrs.get("indicative_market")
+    market = fresh_market if isinstance(fresh_market, pd.DataFrame) and not fresh_market.empty else schedule.attrs.get("indicative_market")
     lookup = {}
     if isinstance(market, pd.DataFrame) and not market.empty:
         required = {"game_id", "market_home_handicap", "market_total", "market_provider"}
@@ -88,6 +94,7 @@ def tonight_slate(games: pd.DataFrame, schedule: pd.DataFrame, now=None,
         if market.game_id.astype(str).duplicated().any():
             raise ValueError("Duplicate market event IDs")
         lookup = market.set_index("game_id").to_dict(orient="index")
+    ids_by_event = schedule.attrs.get("espn_event_team_ids",{})
     rows = []
     for _, p in predictions.iterrows():
         m = lookup.get(p.game_id, {})
@@ -95,15 +102,31 @@ def tonight_slate(games: pd.DataFrame, schedule: pd.DataFrame, now=None,
         total = pd.to_numeric(m.get("market_total"), errors="coerce")
         model_margin = float(p.projected_home_margin)
         model_total = float(p.projected_total)
+        origin = str(m.get("market_verification", "UNVERIFIED ESPN SCOREBOARD SNAPSHOT"))
+        is_fresh = origin == "ODDS_API_FRESH"
+        count = int(m.get("market_book_count",0) or 0) if is_fresh else 0
+        confidence, color, reason = research_confidence(
+            int(p.home_sample), int(p.away_sample),
+            home_handicap=spread if pd.notna(spread) and is_fresh else None,
+            disagreement=model_margin+float(spread) if pd.notna(spread) and is_fresh else None,
+            market_source=origin,book_count=count)
+        sim = simulate_preview(
+            str(p.game_id),model_margin,model_total,
+            float(p.margin_sigma),float(p.total_sigma),
+            home_handicap=spread if pd.notna(spread) and is_fresh else None,
+            market_total=total if pd.notna(total) and is_fresh else None)
+        team_ids = ids_by_event.get(str(p.game_id), {})
         signs = []
         if int(p.home_sample) < 2 or int(p.away_sample) < 2:
             signs.append("LIMITED TEAM DATA")
         if pd.notna(spread) and abs(float(spread)) >= 21:
             signs.append("LARGE FAVORITE: 2025 MODEL WEAKNESS")
-        if pd.notna(spread) or pd.notna(total):
-            signs.append("UNVERIFIED ESPN BOOK SNAPSHOT")
-        else:
-            signs.append("NO BOOK LINE")
+        if not is_fresh:
+            signs.append("VEGAS LINE NOT INDEPENDENTLY VERIFIED")
+        if pd.notna(spread) and not is_fresh:
+            signs.append("ESPN INDICATIVE LINE ONLY")
+        if pd.isna(spread):
+            signs.append("NO SPREAD LINE")
         rows.append({
             "game_id": str(p.game_id), "kickoff_utc": p.kickoff_utc,
             "matchup": f"{p.away_team} @ {p.home_team}",
@@ -119,7 +142,21 @@ def tonight_slate(games: pd.DataFrame, schedule: pd.DataFrame, now=None,
             "spread_disagreement_points": round(model_margin+float(spread),1) if pd.notna(spread) else None,
             "total_disagreement_points": round(model_total-float(total),1) if pd.notna(total) else None,
             "market_provider": str(m.get("market_provider","NO SOURCE")),
+            "market_verification": origin if m else "NO DATA",
+            "market_book_count": count,
+            "market_oldest_quote_minutes": m.get("market_oldest_quote_minutes"),
             "caution": " · ".join(signs),
             "decision": "PASS — NO VERIFIED POSITIVE EV",
+            "home_team": str(p.home_team), "away_team": str(p.away_team),
+            "home_espn_id": str(team_ids.get("home","")),
+            "away_espn_id": str(team_ids.get("away","")),
+            "margin_sigma": float(p.margin_sigma), "total_sigma":float(p.total_sigma),
+            "research_confidence": confidence, "confidence_color":color,
+            "confidence_reason": reason,
+            "simulations":int(sim["simulations"]),
+            "sim_home_win_pct":sim["home_win_pct"], "sim_away_win_pct":sim["away_win_pct"],
+            "sim_home_cover_pct":sim["home_cover_pct"], "sim_over_pct":sim["over_pct"],
+            "sim_margin_p10":sim["margin_p10"], "sim_margin_p90":sim["margin_p90"],
+            "sim_total_p10":sim["total_p10"], "sim_total_p90":sim["total_p90"],
         })
     return pd.DataFrame(rows, columns=BOARD_COLUMNS)

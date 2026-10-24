@@ -81,6 +81,7 @@ def parse_schedule_events(payload: dict, id_to_name: dict, now=None) -> pd.DataF
     if not payload["events"]:
         raise ValueError("ESPN returned no schedule events; verify endpoint and date range")
     rows, seen, market_rows = [], set(), []
+    event_ids, event_aliases = {}, {}
     stats = {"received": len(payload["events"]), "started": 0,
              "unmapped": 0, "invalid": 0}
     for e in payload["events"]:
@@ -105,12 +106,20 @@ def parse_schedule_events(payload: dict, id_to_name: dict, now=None) -> pd.DataF
             stats["invalid"] += 1
             continue
         matched = {}
+        matched_ids = {}
+        matched_aliases = {}
         for x in opponents:
             if not isinstance(x, dict) or x.get("homeAway") not in ("home", "away"):
                 continue
-            tid = str((x.get("team") or {}).get("id", "")).strip()
+            team = x.get("team") or {}
+            tid = str(team.get("id", "")).strip()
             if tid in mapping:
-                matched[x["homeAway"]] = mapping[tid]
+                side = x["homeAway"]
+                matched[side] = mapping[tid]
+                matched_ids[side] = tid
+                matched_aliases[side] = sorted({str(value).strip() for value in (
+                    mapping[tid], team.get("displayName"), team.get("shortDisplayName"),
+                    team.get("location")) if isinstance(value,str) and value.strip()})
         if len(matched) != 2:
             stats["unmapped"] += 1
             continue
@@ -119,6 +128,8 @@ def parse_schedule_events(payload: dict, id_to_name: dict, now=None) -> pd.DataF
             stats["invalid"] += 1
             continue
         seen.add(eid)
+        event_ids[f"espn-{eid}"] = matched_ids
+        event_aliases[f"espn-{eid}"] = matched_aliases
         indicative = indicative_espn_odds(e, comp, now)
         if indicative:
             market_rows.append(indicative)
@@ -142,7 +153,9 @@ def parse_schedule_events(payload: dict, id_to_name: dict, now=None) -> pd.DataF
     df.attrs.update({
         "source": "ESPN public scoreboard (unofficial, read-only)",
         "fetched_utc": now.isoformat(), "stats": stats,
-        "indicative_market": pd.DataFrame(market_rows)
+        "indicative_market": pd.DataFrame(market_rows),
+        "espn_event_team_ids": event_ids,
+        "espn_event_aliases": event_aliases
     })
     return df
 
