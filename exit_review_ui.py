@@ -15,6 +15,7 @@ from exit_liquidity import (
 )
 from position_ledger import open_positions
 from scanner import _get
+from ui_timezone import format_central
 
 
 def _usd(value):
@@ -81,7 +82,7 @@ def _review_card(snapshot, integrity_ok, integrity_reason):
 <div class="kl-port-panel">
   <div class="kl-port-title">Public order-book exit research</div>
   <div class="kl-port-muted">{title} · Selling held {side} contracts ·
-    Snapshot checked UTC {escape(str(snapshot.get("checked_utc") or "Unknown"))}</div>
+    Snapshot checked (Central) {escape(format_central(snapshot.get("checked_utc"),missing="Unknown"))}</div>
   <div class="kl-port-chip pending">UNVERIFIED · NO EXIT SIGNAL</div>
   <div class="kl-port-grid">
     <div class="kl-port-stat"><small>Held-side best bid</small><strong>{best_bid}</strong>

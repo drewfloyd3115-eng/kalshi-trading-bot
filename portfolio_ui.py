@@ -8,6 +8,7 @@ from position_ledger import (
     record_entry, record_exit, validate_ledger,
 )
 from exit_review_ui import render_exit_review
+from ui_timezone import display_central_columns
 
 
 def portfolio_view_model(history, queue, bankroll, other_exposure, queue_exposure):
@@ -269,7 +270,7 @@ def _ledger_history(ledger):
     if not ledger.empty:
         visible = ["recorded_at_utc", "event", "ticker", "side", "action",
                    "shares", "price_cents", "fee_usd", "position_id"]
-        st.dataframe(ledger[visible], hide_index=True, use_container_width=True)
+        st.dataframe(display_central_columns(ledger[visible]), hide_index=True, use_container_width=True)
     else:
         st.info("No manually recorded position transactions yet.")
 
@@ -341,7 +342,7 @@ def portfolio_page(bankroll, other_exposure):
         st.caption(f'{model["queue_count"]} queued decisions · USD ' +
                    f'{model["queue_exposure"]:,.2f}' + ' of pending research exposure, not fills')
         if model["queue"]:
-            st.dataframe(pd.DataFrame(model["queue"]), hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(pd.DataFrame(model["queue"])), hide_index=True, use_container_width=True)
         else:
             st.markdown('<div class="kl-port-panel"><div class="kl-port-title">'
                         'No queued paper decisions</div>'
@@ -401,7 +402,7 @@ def portfolio_page(bankroll, other_exposure):
             cols = ["scan_utc", "event", "ticker", "side", "paper_status",
                     "paper_shares", "settlement_result", "paper_pnl_usd"]
             visible = [col for col in cols if col in model["history"].columns]
-            st.dataframe(model["history"][visible], hide_index=True, use_container_width=True)
+            st.dataframe(display_central_columns(model["history"][visible]), hide_index=True, use_container_width=True)
             st.download_button("Download paper history CSV",
                                model["history"].to_csv(index=False).encode("utf-8"),
                                file_name="kalshi_paper_history.csv",

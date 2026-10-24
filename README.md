@@ -56,3 +56,8 @@ An independent historical-results baseline and holdout-season audit are availabl
 ## Upcoming CFB schedule (paper-only)
 
 In the **CFB Model** tab load the free public FBS scores, then select **Load upcoming 8 days of FBS games**. This fetches pregame ESPN schedule events using verified historical ESPN team IDs, with no credentials or bets. The model excludes started games and unidentified teams and shows an explicit error when ESPN data is unavailable. Predictions are **not validated profitable bets**. Details: [CFB_PREDICTION_LAB.md](CFB_PREDICTION_LAB.md).
+
+
+## Display timezone
+
+**All human-readable app dates/times default to Central Time (America/Chicago).** Daylight-saving changes are automatic: CDT (UTC−5) during daylight time and CST (UTC−6) during standard time. This applies to CFB kickoff selectors/tables, sportsbook kickoff fields, market snapshot captions and portfolio history. The raw downloaded CSV audit columns and internal kickoff/fee/quote-freshness validation remain timestamped in UTC; those source fields are never rewritten just to change the display timezone. Missing or timezone-naive timestamps are shown as unverified rather than assumed Central.
