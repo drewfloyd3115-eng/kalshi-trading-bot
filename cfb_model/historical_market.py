@@ -77,6 +77,103 @@ def _formatted_home_handicap(formatted: str, home: str, away: str):
     return None
 
 
+# Fixed tie-breaker determined before evaluating any actual game outcomes.
+# Auto chooses ONE provider for a whole year based only on usable line coverage.
+PROVIDER_PRIORITY = ("consensus", "DraftKings", "Caesars", "teamrankings",
+                     "Bovada", "numberfire")
+
+
+def available_cfbd_providers(raw: list) -> dict:
+    """Sanitized availability diagnostics. No keys, raw payloads or prices emitted."""
+    if not isinstance(raw, list):
+        raise ValueError("CFBD /lines must return a game list")
+    providers: dict[str, dict] = {}
+    with_lines = 0
+    malformed_games = 0
+    for g in raw:
+        if not isinstance(g, dict):
+            malformed_games += 1
+            continue
+        g_lines = g.get("lines") or []
+        if not isinstance(g_lines, list):
+            malformed_games += 1
+            continue
+        if g_lines:
+            with_lines += 1
+        home = g.get("homeTeam", g.get("home_team"))
+        away = g.get("awayTeam", g.get("away_team"))
+        identifier = g.get("id", g.get("gameId", g.get("game_id")))
+        valid_game = identifier is not None and home and away and home != away
+        seen_provider = set()
+        for line in g_lines:
+            if not isinstance(line, dict):
+                continue
+            name = str(line.get("provider") or "").strip()
+            if not name:
+                continue
+            item = providers.setdefault(name, {"provider": name, "game_records": 0,
+                                               "usable_games": 0,
+                                               "usable_spreads": 0,
+                                               "usable_totals": 0})
+            if name.casefold() in seen_provider:
+                continue
+            seen_provider.add(name.casefold())
+            item["game_records"] += 1
+            if not valid_game:
+                continue
+            formatted = line.get("formattedSpread", line.get("formatted_spread"))
+            spread = _formatted_home_handicap(formatted, home, away)
+            total = _numeric(line.get("overUnder", line.get("over_under")))
+            if total is not None and not (15 <= total <= 120):
+                total = None
+            if spread is not None or total is not None:
+                item["usable_games"] += 1
+                item["usable_spreads"] += int(spread is not None)
+                item["usable_totals"] += int(total is not None)
+    sorted_providers = sorted(providers.values(),
+                              key=lambda d: (-d["usable_games"], d["provider"].casefold()))
+    return {"total_games_returned": len(raw),
+            "games_with_line_records": with_lines,
+            "malformed_games": malformed_games,
+            "providers": sorted_providers}
+
+
+def choose_cfbd_provider(report: dict, preference: str = "Auto") -> str:
+    """Deterministic provider selection; never select by actual results/profit."""
+    choices = [p for p in report.get("providers", []) if p["usable_games"] > 0]
+    if not choices:
+        raise ValueError("No usable provider data: CFBD returned "
+                         f"{report.get('total_games_returned',0)} games, "
+                         f"{report.get('games_with_line_records',0)} with line records. "
+                         "Check season, access tier, and available providers.")
+    if preference != "Auto":
+        requested = next((p for p in choices if p["provider"].casefold() == preference.casefold()), None)
+        if requested is None:
+            available = ", ".join(f"{p['provider']} ({p['usable_games']} games)" for p in choices[:8])
+            raise ValueError(f"Provider {preference!r} has no usable records in this season. "
+                             f"Available: {available}. Use Auto or select an available provider.")
+        return requested["provider"]
+    preference_rank = {name.casefold(): i for i, name in enumerate(PROVIDER_PRIORITY)}
+    return min(choices, key=lambda p: (-p["usable_games"],
+                                      preference_rank.get(p["provider"].casefold(), 999),
+                                      p["provider"].casefold()))["provider"]
+
+
+def fetch_cfbd_line_inventory(year: int, token: str, session=None) -> tuple[list, dict]:
+    """Single season request without provider filter to see *actual* availability."""
+    if not token:
+        raise ValueError("CFBD_API_KEY required for historical sportsbook lines")
+    if isinstance(year, bool) or not (2013 <= int(year) <= 2030):
+        raise ValueError("Historical season must be 2013–2030")
+    http = session or requests
+    response = http.get(CFBD_LINES_URL, params={"year": int(year)},
+                        headers={"Authorization": f"Bearer {token}"}, timeout=30)
+    response.raise_for_status()
+    raw = response.json()
+    report = available_cfbd_providers(raw)
+    return raw, report
+
+
 def parse_cfbd_closing_lines(raw: list, provider: str = "consensus") -> pd.DataFrame:
     """Normalize CFBD provider's closing spread/total without guessing home sign.
 
@@ -86,8 +183,8 @@ def parse_cfbd_closing_lines(raw: list, provider: str = "consensus") -> pd.DataF
     """
     if not isinstance(raw, list):
         raise ValueError("CFBD /lines response must be a list")
-    if not str(provider).strip():
-        raise ValueError("Provider name required")
+    report = available_cfbd_providers(raw)
+    chosen = choose_cfbd_provider(report, provider)
     rows = []
     for g in raw:
         if not isinstance(g, dict):
@@ -99,11 +196,11 @@ def parse_cfbd_closing_lines(raw: list, provider: str = "consensus") -> pd.DataF
             continue
         matching = [line for line in (g.get("lines") or [])
                     if isinstance(line, dict) and
-                    str(line.get("provider", "")).casefold() == provider.casefold()]
+                    str(line.get("provider", "")).casefold() == chosen.casefold()]
         if not matching:
             continue
         if len(matching) != 1:
-            raise ValueError(f"Duplicate {provider} provider records for CFBD game {game_id}")
+            raise ValueError(f"Duplicate {chosen} provider records for CFBD game {game_id}")
         line = matching[0]
         spread = _formatted_home_handicap(line.get("formattedSpread", line.get("formatted_spread")), home, away)
         reported = _numeric(line.get("spread"))
@@ -116,24 +213,22 @@ def parse_cfbd_closing_lines(raw: list, provider: str = "consensus") -> pd.DataF
                      "provider": str(line.get("provider")), "home_handicap": spread,
                      "total": total})
     if not rows:
-        raise ValueError("No usable historical lines for the chosen provider; confirm provider and season")
-    return normalize_closing_lines(pd.DataFrame(rows))
+        raise ValueError(f"No usable historical lines after selecting {chosen}; inspect the source diagnostics")
+    result = normalize_closing_lines(pd.DataFrame(rows))
+    result.attrs["selected_provider"] = chosen
+    result.attrs["source_diagnostics"] = report
+    return result
 
 
-def fetch_cfbd_closing_lines(year: int, token: str, provider: str = "consensus",
+def fetch_cfbd_closing_lines(year: int, token: str, provider: str = "Auto",
                              session=None) -> pd.DataFrame:
-    """One manual, API-key-authenticated CFBD historical closing-line request."""
-    if not token:
-        raise ValueError("CFBD_API_KEY required for historical sportsbook lines")
-    if isinstance(year, bool) or not (2013 <= int(year) <= 2030):
-        raise ValueError("Historical season must be 2013–2030")
-    if provider not in ("consensus", "DraftKings", "Caesars", "Bovada", "teamrankings"):
-        raise ValueError("Select a supported historical provider")
-    http = session or requests
-    response = http.get(CFBD_LINES_URL, params={"year": int(year), "provider": provider},
-                        headers={"Authorization": f"Bearer {token}"}, timeout=30)
-    response.raise_for_status()
-    return parse_cfbd_closing_lines(response.json(), provider=provider)
+    """Use a single unfiltered season request, then one provider chosen locally.
+
+    No silent fallback for a specifically requested provider. Report available
+    alternatives and safely refuse if no usable lines exist.
+    """
+    raw, report = fetch_cfbd_line_inventory(year, token, session=session)
+    return parse_cfbd_closing_lines(raw, provider=provider)
 
 
 def calibration_table(predictions: pd.DataFrame, season: int) -> pd.DataFrame:

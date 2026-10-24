@@ -6,6 +6,7 @@ import pandas as pd
 from cfb_model.historical_market import (
     _formatted_home_handicap, normalize_closing_lines,
     parse_cfbd_closing_lines, fetch_cfbd_closing_lines,
+    fetch_cfbd_line_inventory, available_cfbd_providers, choose_cfbd_provider,
     benchmark_predictions, calibration_table
 )
 
@@ -97,8 +98,61 @@ class CFBDHistoricalLineTests(unittest.TestCase):
         ]
         result=fetch_cfbd_closing_lines(2025,"secret-test",session=http)
         self.assertEqual(len(result),1)
-        self.assertEqual(http.get.call_args.kwargs["params"],{"year":2025,"provider":"consensus"})
+        self.assertEqual(http.get.call_args.kwargs["params"],{"year":2025})
         self.assertIn("Bearer secret-test",http.get.call_args.kwargs["headers"]["Authorization"])
+
+    def test_provider_inventory_when_consensus_missing(self):
+        raw=[{"id":120,"homeTeam":"Illinois","awayTeam":"Oregon","lines":[
+            {"provider":"DraftKings","formattedSpread":"Oregon -9.5","overUnder":49.5},
+            {"provider":"Caesars","formattedSpread":"Oregon -8.5","overUnder":50.5}
+        ]},{"id":121,"homeTeam":"Michigan","awayTeam":"Ohio State","lines":[
+            {"provider":"DraftKings","formattedSpread":"Ohio State -3.5","overUnder":47.5}
+        ]}]
+        report=available_cfbd_providers(raw)
+        self.assertEqual(report["total_games_returned"],2)
+        self.assertEqual(report["games_with_line_records"],2)
+        self.assertEqual({p["provider"]:p["usable_games"] for p in report["providers"]},
+                         {"DraftKings":2,"Caesars":1})
+        self.assertEqual(choose_cfbd_provider(report,"Auto"),"DraftKings")
+        data=parse_cfbd_closing_lines(raw,"Auto")
+        self.assertEqual(data.attrs["selected_provider"],"DraftKings")
+        self.assertEqual(len(data),2)
+        with self.assertRaisesRegex(ValueError,"Available"):
+            parse_cfbd_closing_lines(raw,"consensus")
+
+    def test_provider_selection_does_not_use_results_or_preferred_price(self):
+        raw=[{"id":120,"home_team":"Illinois","away_team":"Oregon","lines":[
+            {"provider":"DraftKings","formatted_spread":"Oregon -9.5","over_under":50.5},
+            {"provider":"Caesars","formatted_spread":"Oregon -11.5","over_under":51.5}
+        ]}]
+        report=available_cfbd_providers(raw)
+        self.assertEqual(choose_cfbd_provider(report,"Auto"),"DraftKings")
+        self.assertEqual(choose_cfbd_provider(report,"Caesars"),"Caesars")
+
+    def test_empty_season_diagnostic_and_fail_closed(self):
+        report=available_cfbd_providers([{"id":120,"homeTeam":"A","awayTeam":"B","lines":[]}])
+        self.assertEqual(report["games_with_line_records"],0)
+        self.assertEqual(report["providers"],[])
+        with self.assertRaisesRegex(ValueError,"No usable provider data"):
+            choose_cfbd_provider(report)
+        with self.assertRaisesRegex(ValueError,"No usable provider data"):
+            parse_cfbd_closing_lines([],"Auto")
+
+    def test_fetch_provider_inventory_uses_single_unfiltered_call(self):
+        http=Mock()
+        payload=[{"id":120,"homeTeam":"Illinois","awayTeam":"Oregon",
+                  "lines":[{"provider":"Caesars","formattedSpread":"Oregon -9.5",
+                            "overUnder":52.5}]}]
+        http.get.return_value.json.return_value=payload
+        raw,report=fetch_cfbd_line_inventory(2025,"example-not-a-real-key",session=http)
+        self.assertEqual(http.get.call_count,1)
+        self.assertEqual(http.get.call_args.kwargs["params"],{"year":2025})
+        self.assertEqual(report["providers"][0]["provider"],"Caesars")
+        self.assertEqual(len(parse_cfbd_closing_lines(raw,provider="Auto")),1)
+
+    def test_malformed_source_response_rejected(self):
+        with self.assertRaisesRegex(ValueError,"game list"):
+            available_cfbd_providers({"games":[]})
 
     def test_spread_and_total_paired_mae(self):
         result,table=benchmark_predictions(predicted(),closing())

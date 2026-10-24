@@ -8,7 +8,8 @@ from .core import walk_forward, Forecast
 from .data import read_games_csv, fetch_years, fetch_public_years, COLUMNS
 from .backtest import score_predictions
 from .historical_market import (calibration_table, benchmark_predictions,
-                                fetch_cfbd_closing_lines, normalize_closing_lines, LINE_COLUMNS)
+                                fetch_cfbd_line_inventory, parse_cfbd_closing_lines,
+                                normalize_closing_lines, LINE_COLUMNS)
 from .value import evaluate, from_orderbook, taker_fee
 from ui_timezone import format_central, display_central_columns
 
@@ -135,7 +136,6 @@ def render_model_ui():
         st.caption("Paired spread and total MAE against actual closing lines. Only matching game IDs and exact home/away teams are accepted. No quote timestamps or executable prices = NO historical EV or P&L evidence.")
         market_source=st.radio("Historical sportsbook data",["Upload closing-lines CSV (no key)",
             "Fetch CFBD historical lines (requires API key)"],key="cfb_line_source")
-        selected_provider=st.selectbox("Provider",["consensus","DraftKings","Caesars","Bovada","teamrankings"],key="cfb_line_provider")
         if market_source.startswith("Upload"):
             template=pd.DataFrame(columns=LINE_COLUMNS).to_csv(index=False)
             st.download_button("Download historical-lines CSV template",template,
@@ -152,19 +152,56 @@ def render_model_ui():
                     st.session_state.pop("cfb_closing_lines",None)
                     st.error(f"Closing-lines CSV rejected: {exc}")
         else:
+            st.caption("Step 1: fetch ALL available historical line providers for the selected year with one CFBD request. Step 2: choose a provider locally. No extra API requests for switching providers.")
             if not _key():
-                st.info("Add CFBD_API_KEY privately in Streamlit Secrets to import official historical closing lines. Do not publish the key in code or screenshots.")
-            if st.button(f"Fetch {int(test_year)} {selected_provider} closing lines (manual)",
-                         key="cfb_market_fetch",disabled=not bool(_key())):
+                st.info("Add CFBD_API_KEY privately in Streamlit Secrets. Never paste the key into chat, screenshots or GitHub.")
+            if st.button(f"Check {int(test_year)} historical provider availability",
+                         key="cfb_market_fetch", disabled=not bool(_key())):
+                # Clear previous benchmark: never reuse lines from a different
+                # year, source or failed/incomplete fetch.
+                for cache_key in ("cfb_closing_lines","cfb_line_year","cfb_line_raw",
+                                  "cfb_line_inventory","cfb_line_inventory_year"):
+                    st.session_state.pop(cache_key,None)
                 try:
-                    with st.spinner("Fetching historical bookmaker lines from CollegeFootballData..."):
-                        loaded=fetch_cfbd_closing_lines(int(test_year),_key(),selected_provider)
-                    st.session_state.cfb_closing_lines=loaded
-                    st.session_state.cfb_line_year=int(test_year)
-                    st.success(f"Loaded {len(loaded)} {selected_provider} historical game-line records.")
+                    with st.spinner("Checking available CFBD sportsbook providers for this year..."):
+                        raw,inventory=fetch_cfbd_line_inventory(int(test_year),_key())
+                    st.session_state.cfb_line_raw=raw
+                    st.session_state.cfb_line_inventory=inventory
+                    st.session_state.cfb_line_inventory_year=int(test_year)
+                    st.success("Downloaded a provider inventory for this season. The summary below shows what actually exists.")
                 except Exception as exc:
-                    st.session_state.pop("cfb_closing_lines",None)
-                    st.error(f"Historical lines fetch failed: {exc}")
+                    st.error(f"Historical provider inventory request failed: {exc}")
+            inventory=st.session_state.get("cfb_line_inventory")
+            inventory_year=st.session_state.get("cfb_line_inventory_year")
+            raw=st.session_state.get("cfb_line_raw")
+            if isinstance(inventory,dict) and inventory_year==int(test_year) and isinstance(raw,list):
+                st.write("**CFBD availability diagnostic**")
+                st.caption(f"Games returned: {inventory['total_games_returned']:,} · Games with any line records: {inventory['games_with_line_records']:,} · No provider entries are invented.")
+                suppliers=inventory.get("providers",[])
+                if suppliers:
+                    st.dataframe(pd.DataFrame(suppliers),hide_index=True,use_container_width=True)
+                else:
+                    st.warning("This API response has no named sportsbook providers. Check CFBD plan permissions or try another year.")
+                valid_suppliers=[p["provider"] for p in suppliers if p.get("usable_games",0)>0]
+                if valid_suppliers:
+                    provider=st.selectbox("Benchmark provider",["Auto (best coverage)"]+valid_suppliers,
+                                          key="cfb_line_provider_checked",
+                                          help="Auto chooses one provider by available line coverage only, never by betting outcomes.")
+                    if st.button("Load available closing lines (no new API request)",
+                                 key="cfb_line_parse_cached"):
+                        chosen="Auto" if provider.startswith("Auto") else provider
+                        try:
+                            parsed=parse_cfbd_closing_lines(raw,chosen)
+                            st.session_state.cfb_closing_lines=parsed
+                            st.session_state.cfb_line_year=int(test_year)
+                            st.success(f"Loaded {len(parsed)} historical games using {parsed.attrs.get('selected_provider','one provider')}. Market benchmark uses exact matched game IDs.")
+                        except Exception as exc:
+                            st.session_state.pop("cfb_closing_lines",None)
+                            st.error(f"Provider {chosen} records not usable: {exc}")
+                else:
+                    st.warning("CFBD returned no usable historical spreads or totals from the listed providers. Model accuracy is still measurable; the sportsbook benchmark is not.")
+            elif inventory_year is not None and inventory_year != int(test_year):
+                st.info("Historical provider inventory belongs to another season. Check provider availability for the selected year.")
         cached_lines=st.session_state.get("cfb_closing_lines")
         cached_year=st.session_state.get("cfb_line_year")
         if isinstance(cached_lines,pd.DataFrame) and not cached_lines.empty:
