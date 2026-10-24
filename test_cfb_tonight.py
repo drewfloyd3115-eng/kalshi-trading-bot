@@ -95,7 +95,8 @@ class TonightCFBTests(unittest.TestCase):
         h=enough_history()
         fixture=schedule()
         other=schedule(home="Beta",away="Alpha",eid="901")
-        both=pd.concat([fixture,other],ignore_index=True)
+        both=pd.concat([pd.DataFrame(fixture.to_dict("records")),
+                        pd.DataFrame(other.to_dict("records"))],ignore_index=True)
         both.attrs=dict(fixture.attrs)
         both.attrs["indicative_market"]=pd.concat([
             fixture.attrs["indicative_market"],
