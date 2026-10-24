@@ -29,6 +29,12 @@ def render_model_ui():
                 with st.spinner("Downloading real historical results from public GitHub CSVs..."):
                     st.session_state.cfb_games=fetch_public_years(2020,2026)
                 st.success(f"Loaded {len(st.session_state.cfb_games):,} real FBS matchups")
+                gaps=st.session_state.cfb_games.attrs.get("missing_seasons",[])
+                if gaps:
+                    st.warning("Incomplete historical source: no FBS records available for "
+                               + ", ".join(map(str,gaps))
+                               + ". These seasons are excluded, NOT filled with estimated games. "
+                               + "Treat accuracy as preliminary. Use an official CFBD import for complete history.")
             except Exception as exc:st.error(f"Public data fetch failed: {exc}")
     elif source.startswith("Upload"):
         upload=st.file_uploader("CFBD games CSV (real data, unique game IDs)",type=["csv"],key="cfb_data_file")
@@ -55,6 +61,11 @@ def render_model_ui():
         st.download_button("Download CSV column template",pd.DataFrame(columns=COLUMNS).to_csv(index=False),file_name="cfbd_games_template.csv")
         return
     games=st.session_state.cfb_games
+    gaps=games.attrs.get("missing_seasons",[])
+    if gaps:
+        st.warning("HISTORICAL COVERAGE GAP — missing season(s): "
+                   + ", ".join(map(str,gaps))
+                   + ". This data is incomplete; validation estimates may be biased.")
     if games.empty:
         st.error("No real games in the dataset")
         return
@@ -63,7 +74,7 @@ def render_model_ui():
     except Exception as exc:
         st.error(f"Model could not run: {exc}")
         return
-    st.caption(f"Loaded {len(games):,} games; {int(games.completed.sum()):,} completed. Every forecast was generated before that game's result was used for rating updates.")
+    st.caption(f"Loaded {len(games):,} games; {int(games.completed.sum()):,} completed. Available seasons: {', '.join(map(str,sorted(set(games.season.astype(int)))))}. Every forecast was generated before that game's result was used for rating updates.")
     st.download_button("Download pregame projections CSV",predictions.to_csv(index=False).encode("utf-8"),file_name="cfb_pregame_predictions.csv",mime="text/csv")
     st.subheader("Walk-forward holdout validation")
     valid_seasons=sorted(set(predictions.loc[predictions.completed,"season"].astype(int)))
