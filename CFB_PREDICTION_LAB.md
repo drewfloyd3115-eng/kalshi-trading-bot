@@ -138,3 +138,16 @@ If historical lines aren't accessible, the honest result is **benchmark not yet 
 The historical line API may contain no `consensus` entries for a given year. When loading 2025, **check historical provider availability** first. This makes one user-triggered `/lines?year=2025` request without a provider filter, reports returned game count and available book-provider coverage, and retains the source records temporarily in the Streamlit session. Next choose **Auto (best coverage)** or one available named provider and tap **Load available closing lines (no new API request)**. Auto selects **one bookmaker** for the season by count of usable records (fixed provider-name tie-break), never by outcomes, projected model edges or winning bets.
 
 If no usable providers exist, the app gives an explicit diagnostic; it does not manufacture historical lines or silently substitute another year. An explicitly selected absent provider fails with available alternatives. Market closing lines are not timestamped executable contracts, and none of these diagnostics establishes profitability. Keep `CFBD_API_KEY` in Streamlit Secrets only.
+
+
+### 2025 model weakness diagnostics (post-hoc, descriptive only)
+
+When a historical sportsbook benchmark is available, open **Why our model trails the sportsbook — diagnostic audit** under the matched-game results. It uses ONLY the paired file already loaded (no new odds/API request) and shows:
+
+- Average spread and total errors versus the same source on the same games.
+- Spread error by fixed week ranges (weeks 1–4, 5–8, 9–14, 15+).
+- Spread error by magnitude of sportsbook's favorite (under 3, 3–6.5, 7–13.5, 14–20.5, 21+).
+- Spread error by model-to-market disagreement (<3, 3–6.5, 7–13.5, 14+).
+- Total error by fixed sportsbook-total bands, plus 15 largest raw point-margin failures.
+
+**Important statistical discipline:** The 2025 data have now been inspected and influence our hypothesis about correcting spread compression. Treat 2025 as diagnostic/development data, never a fresh out-of-sample validation of any subsequently tuned model. Fit hyperparameters using earlier seasons and check genuinely later, unseen games with a pre-registered evaluation protocol. A decrease in historical MAE here does NOT verify a positive EV or profitable bet. The audit does not change model forecasts, Kalshi execution, or API keys.
