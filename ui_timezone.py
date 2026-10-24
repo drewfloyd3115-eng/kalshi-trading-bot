@@ -19,6 +19,9 @@ UI_COLUMN_LABELS = {
     "captured_utc": "Captured (Central)",
     "market_observed_utc": "Market observed (Central)",
     "close_time": "Market closes (Central)",
+    "start": "Kickoff (Central)",
+    "updated": "Book updated (Central)",
+    "checked_utc": "Checked (Central)",
     "updated_time": "Market updated (Central)",
 }
 
