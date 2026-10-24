@@ -51,7 +51,7 @@ def _alias_set(values):
 
 
 def match_fresh_spreads(schedule: pd.DataFrame, odds_events: list,
-                        now=None, max_age_minutes: int=MAX_QUOTE_AGE_MINUTES) -> pd.DataFrame:
+                        now=None, max_age_minutes: int=180) -> pd.DataFrame:
     """Exact team alias+kickoff match, robust price sign and chronological checks.
 
     The output uses model data game IDs and signed HOME handicap. A median is
@@ -196,6 +196,8 @@ def explain_unmatched_vegas(schedule: pd.DataFrame, odds_events: list,
         if not markets:
             reasons[gid]="NO_SPREAD_MARKET_IN_API_RESPONSE"
             continue
+        # This initial reason tracks quote timestamps; actual outcome/sign validation
+        # happens in match_fresh_spreads, with a separate terminal reason.
         ages=[(clock-t).total_seconds()/60 for m in markets
               for t in [_utc(m.get("last_update"))] if pd.notna(t)]
         if not ages:
