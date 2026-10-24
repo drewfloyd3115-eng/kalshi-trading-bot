@@ -68,3 +68,8 @@ In the **CFB Model** tab load the free public FBS scores, then select **Load upc
 The **CFB Model** tab now includes an optional **Probability calibration** view and a **Historical sportsbook benchmark** view. With real historical CFBD /lines data it compares model point-spread/total mean absolute errors against same-game sportsbook closing-line errors using exact game IDs and team names. It shows matching sample counts, coverage and uncertainty; does **not** calculate historical wager profits or treat untimestamped closing lines as executable entry prices.
 
 Use the real **closing-lines CSV upload** route without a key or configure `CFBD_API_KEY` *privately* in Streamlit Cloud Secrets, then manually fetch the selected season's historical lines (2025 by default). The app never fetches historical bookmaker data automatically or uses it to train its model. See [CFB_PREDICTION_LAB.md](CFB_PREDICTION_LAB.md) for the schema and offline CLI. Missing or mismatched lines remain unavailable rather than fabricated.
+
+
+### CFBD historical-line provider diagnostics
+
+CFB Model → Historical sportsbook benchmark now uses a manual **Check provider availability** step for the selected year. CFBD does not guarantee every year has `consensus` lines. One unfiltered source request shows available provider coverage, then users choose an actual provider (or **Auto**, based only on record coverage) without more API calls. An empty response is honestly reported and never replaced with invented data. This screen remains paper-only and does not consume ODDS_API_KEY credits.
