@@ -50,6 +50,16 @@ class CFBDHistoricalLineTests(unittest.TestCase):
         df=parse_cfbd_closing_lines(raw,provider="DraftKings")
         self.assertEqual(df.iloc[0].home_handicap,10.5)
 
+    def test_snake_case_vendor_response_supported(self):
+        raw=[{"id":120,"home_team":"Illinois","away_team":"Oregon","lines":[
+            {"provider":"consensus","formatted_spread":"Oregon -9.5",
+             "spread":-9.5,"over_under":49.5}
+        ]}]
+        rows=parse_cfbd_closing_lines(raw)
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows.iloc[0].home_handicap,9.5)
+        self.assertEqual(rows.iloc[0].total,49.5)
+
     def test_malformed_spread_only_allows_total(self):
         raw=[{"id":120,"homeTeam":"Illinois","awayTeam":"Oregon","lines":[
             {"provider":"consensus","formattedSpread":"ILL -9.5","spread":9.5,"overUnder":50.5}
