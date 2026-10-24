@@ -63,18 +63,61 @@ class CFBUpcomingScheduleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "events"):
             parse_schedule_events({}, {"30": "Michigan"}, now=NOW)
 
-    def test_fetch_uses_bounded_dates_and_no_auth(self):
+    def test_fetch_uses_single_day_requests_deduplicates_and_no_auth(self):
         ss=Mock()
+        # ESPN events can be repeated across consecutive daily responses.
         ss.get.return_value.json.return_value={"events":[event()]}
         df=fetch_upcoming_schedule({"30":"Michigan","40":"Indiana"},now=NOW,days=8,session=ss)
         self.assertEqual(len(df),1)
-        request=ss.get.call_args
-        self.assertEqual(request.kwargs["params"]["groups"],"80")
-        self.assertEqual(request.kwargs["params"]["limit"],500)
-        self.assertEqual(request.kwargs["params"]["dates"],"20261024-20261101")
-        self.assertNotIn("headers",request.kwargs)
+        self.assertEqual(ss.get.call_count,9)
+        requests=ss.get.call_args_list
+        for r in requests:
+            self.assertEqual(r.kwargs["params"]["groups"],"80")
+            self.assertEqual(r.kwargs["params"]["limit"],500)
+            self.assertNotIn("-",r.kwargs["params"]["dates"])
+            self.assertNotIn("headers",r.kwargs)
+        self.assertEqual(requests[0].kwargs["params"]["dates"],"20261024")
+        self.assertEqual(requests[-1].kwargs["params"]["dates"],"20261101")
+        self.assertEqual(df.attrs["dates_checked"],[
+            (NOW+pd.Timedelta(days=n)).strftime("%Y%m%d") for n in range(9)])
         with self.assertRaisesRegex(ValueError,"1–14"):
             fetch_upcoming_schedule({"30":"Michigan","40":"Indiana"},days=30,session=ss)
+
+    def test_daily_schedule_can_be_empty_but_valid(self):
+        ss=Mock()
+        def get(url,params,timeout):
+            r=Mock()
+            r.json.return_value={"events":[event()]} if params["dates"]=="20261025" else {"events":[]}
+            return r
+        ss.get.side_effect=get
+        rows=fetch_upcoming_schedule({"30":"Michigan","40":"Indiana"},now=NOW,days=2,session=ss)
+        self.assertEqual(len(rows),1)
+        self.assertEqual(ss.get.call_count,3)
+
+    def test_failed_day_does_not_produce_incomplete_schedule(self):
+        import requests
+        ss=Mock()
+        def get(url,params,timeout):
+            if params["dates"]=="20261025":
+                raise requests.HTTPError("502 test error")
+            r=Mock()
+            r.json.return_value={"events":[event()]}
+            return r
+        ss.get.side_effect=get
+        with self.assertRaisesRegex(requests.HTTPError,"502"):
+            fetch_upcoming_schedule({"30":"Michigan","40":"Indiana"},now=NOW,days=2,session=ss)
+
+    def test_future_horizon_is_precise(self):
+        ss=Mock()
+        ss.get.return_value.json.return_value={"events":[event(when="2026-10-27T19:30:00Z")]}
+        with self.assertRaisesRegex(ValueError,"no schedule events|no future|No future"):
+            fetch_upcoming_schedule({"30":"Michigan","40":"Indiana"},now=NOW,days=1,session=ss)
+
+    def test_malformed_one_day_fails_closed(self):
+        ss=Mock()
+        ss.get.return_value.json.return_value={"games":[]}
+        with self.assertRaisesRegex(ValueError,"Invalid ESPN scoreboard"):
+            fetch_upcoming_schedule({"30":"Michigan","40":"Indiana"},now=NOW,days=1,session=ss)
 
     def test_public_source_builds_team_id_mapping(self):
         sample=(SCOREBOARD_HEADER+
