@@ -81,3 +81,8 @@ No quote history supplied => **no historical ROI claims**.
 5. ESPN's scoreboard is an undocumented third-party API and might become unavailable. Public game results can omit or misclassify fixtures. An empty or failed schedule does not imply no FBS games exist.
 
 The public results source also lacks 2022. Its missing season is not filled or inferred. Historical profitability remains unproven; no betting or order placement is enabled.
+
+
+### ESPN schedule compatibility (October 24, 2026)
+
+ESPN now responds HTTP 400 when the scoreboard receives date ranges such as `dates=20261024-20261101`. The upcoming eight-day loader uses one bounded **single-day** request per UTC calendar date, deduplicates by exact event ID, and then filters to future pregame events inside the requested rolling horizon. Any failed or malformed daily request blocks the entire schedule rather than showing a partial slate as complete. No API key or sportsbook credits are needed. This is an unofficial ESPN endpoint, so responses can change.
