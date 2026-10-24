@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import Mock
 import pandas as pd
 
-from cfb_model.vegas import fetch_vegas_spreads, match_fresh_spreads
+from cfb_model.vegas import fetch_vegas_spreads, match_fresh_spreads, explain_unmatched_vegas
 from cfb_model.sim_preview import simulate_preview, research_confidence
 from cfb_model.tonight_ui import logo_url, display_spread, model_spread
 from cfb_model.schedule import parse_schedule_events
@@ -60,13 +60,53 @@ class VegasSimulationCardTests(unittest.TestCase):
         self.assertEqual(model_spread("Illinois","Oregon",6.9),"Illinois -6.9")
         self.assertEqual(display_spread("Illinois","Oregon",None),"Unavailable")
 
-    def test_stale_quotes_missing_and_no_fuzzy_team_guessing(self):
-        self.assertTrue(match_fresh_spreads(fixture(),odds(fresh=False),now=NOW).empty)
+    def test_older_quotes_are_references_not_fresh(self):
+        older=match_fresh_spreads(fixture(),odds(fresh=False),now=NOW)
+        self.assertEqual(len(older),1)
+        self.assertEqual(older.iloc[0].market_verification,"ODDS_API_OLDER_REFERENCE")
+        self.assertEqual(older.iloc[0].market_book_count,2)
+        self.assertAlmostEqual(older.iloc[0].market_oldest_quote_minutes,50)
+        self.assertEqual(explain_unmatched_vegas(fixture(),odds(fresh=False),now=NOW)
+                         ["per_game"]["espn-8888888"],"QUOTES_OLDER_THAN_15_MIN")
+
+    def test_exact_names_no_fuzzy_guesses(self):
         event=odds()[0]
         event["home_team"]="Illinois" # exact ESPN alias, still source verified
         self.assertEqual(len(match_fresh_spreads(fixture(),[event],now=NOW)),1)
         event["home_team"]="Illini"  # no short-name/fuzzy guess
         self.assertTrue(match_fresh_spreads(fixture(),[event],now=NOW).empty)
+
+    def test_missing_vegas_diagnostics_explain_actual_reason(self):
+        report=explain_unmatched_vegas(fixture(),[],now=NOW)
+        self.assertEqual(report["events_returned"],0)
+        self.assertEqual(report["per_game"]["espn-8888888"],
+                         "NOT_IN_FEED_OR_TEAM_NAME_MISMATCH")
+        without_spread=odds()
+        without_spread[0]["bookmakers"][0]["markets"]=[]
+        without_spread[0]["bookmakers"][1]["markets"]=[]
+        report=explain_unmatched_vegas(fixture(),without_spread,now=NOW)
+        self.assertEqual(report["per_game"]["espn-8888888"],
+                         "NO_SPREAD_MARKET_IN_API_RESPONSE")
+
+    def test_older_than_180_minutes_not_displayed(self):
+        remote=odds()
+        for book in remote[0]["bookmakers"]:
+            book["last_update"]="2026-10-24T16:00:00Z"
+            book["markets"][0]["last_update"]="2026-10-24T16:00:00Z"
+        self.assertTrue(match_fresh_spreads(fixture(),remote,now=NOW).empty)
+        report=explain_unmatched_vegas(fixture(),remote,now=NOW)
+        self.assertEqual(report["per_game"]["espn-8888888"],
+                         "QUOTES_OVER_180_MIN_OLD_OR_FUTURE_DATED")
+
+    def test_fresh_quote_preferred_over_older_books(self):
+        remote=odds()
+        remote[0]["bookmakers"][1]["last_update"]="2026-10-24T18:45:00Z"
+        remote[0]["bookmakers"][1]["markets"][0]["last_update"]="2026-10-24T18:45:00Z"
+        matched=match_fresh_spreads(fixture(),remote,now=NOW)
+        self.assertEqual(len(matched),1)
+        self.assertEqual(matched.iloc[0].market_book_count,1)
+        self.assertEqual(matched.iloc[0].market_verification,"ODDS_API_FRESH")
+        self.assertEqual(matched.iloc[0].market_home_handicap,9.5)
 
     def test_wrong_kickoff_or_ambiguous_duplicate_event_excluded(self):
         example=odds()[0]
