@@ -16,7 +16,7 @@ def predicted(home="Illinois", away="Oregon", season=2025, margin=-6.9,
         "game_id":"120", "home_team":home, "away_team":away,
         "season":season, "week":9, "kickoff_utc":pd.Timestamp("2025-10-24T19:00:00Z"),
         "home_points":hp, "away_points":ap, "projected_home_margin":margin,
-        "projected_total":total, "home_win_prob":prob,
+        "projected_total":total, "home_win_prob":probability,
         "completed":True, "eligible_history":True,
     }])
 
