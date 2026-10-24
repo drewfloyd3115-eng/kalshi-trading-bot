@@ -4,6 +4,7 @@ import streamlit as st
 from html import escape
 from datetime import datetime, timezone
 from matcher import parse_time
+from ui_timezone import format_central
 
 from config import MIN_EDGE_PP
 from edge_engine import taker_fee
@@ -308,8 +309,8 @@ def home_overview(bankroll, extra_exposure):
     if not meta:
         st.info("No scan in this session. Select CFB or NFL and use Scan Now. Only that action requests sportsbook odds.")
         return
-    st.caption("Last successful scan: " + str(meta.get("time", "Unknown")) +
-               " UTC · Quotes may have expired. Viewing this page uses no Odds API credits.")
+    st.caption("Last successful scan (Central): " + format_central(meta.get("time")) +
+               " · Quotes may have expired. Viewing this page uses no Odds API credits.")
     st.markdown("#### Top research observations")
     if opportunities.empty:
         st.info("No exact matched outcomes in this scan. NO VERIFIED TRADE.")
@@ -551,7 +552,7 @@ def detail_panel_html(row, scan_time=None, now=None):
     <div class="kl-detail-check"><small>Oldest quote at scan</small><strong>{_display_number(row.get("oldest_quote_minutes"),1,"m")}</strong></div>
     <div class="kl-detail-check"><small>Depth check</small><strong>{field("depth_status","NOT INSPECTED")}</strong></div>
   </div>
-  <div class="kl-detail-note">Kickoff UTC: {field("kickoff_utc","NOT VERIFIED")}<br>Quote quality: {quality}</div>
+  <div class="kl-detail-note">Kickoff (Central): {escape(format_central(row.get("kickoff_utc"),missing="NOT VERIFIED"))}<br>Quote quality: {quality}</div>
   <div class="kl-detail-note"><b>Reason:</b> {reason}</div>
 </div>
 '''
