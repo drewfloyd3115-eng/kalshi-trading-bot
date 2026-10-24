@@ -127,6 +127,32 @@ def render_model_ui():
     shown.home_win_prob=(shown.home_win_prob*100).round(1)
     st.dataframe(shown,hide_index=True,use_container_width=True)
     st.download_button("Download upcoming projections CSV",upcoming.to_csv(index=False).encode("utf-8"),file_name="cfb_upcoming_projections.csv",mime="text/csv")
+    st.subheader("Model versus market — indicative research")
+    st.caption("ESPN's public scoreboard sometimes includes sportsbook lines. These are optional, unverified and not executable Kalshi quotes. Discrepancy is a point difference, NOT betting expected value.")
+    if isinstance(schedule,pd.DataFrame):
+        raw_market=schedule.attrs.get("indicative_market")
+        if isinstance(raw_market,pd.DataFrame) and not raw_market.empty:
+            from .market_comparison import discrepancy_table
+            try:
+                comparisons=discrepancy_table(upcoming,raw_market)
+            except (ValueError,TypeError,KeyError) as exc:
+                st.warning(f"Market comparison blocked: {exc}")
+                comparisons=pd.DataFrame()
+            if not comparisons.empty:
+                spread_count=int(comparisons.market_home_handicap.notna().sum())
+                total_count=int(comparisons.market_total.notna().sum())
+                st.caption(f"{spread_count} market spreads and {total_count} totals with verified matchup IDs. Quotes have NOT been checked for executable price, injury changes, sportsbook fees or official settlement rules.")
+                st.dataframe(comparisons,hide_index=True,use_container_width=True)
+                st.download_button("Download indicative market comparison CSV",
+                    comparisons.to_csv(index=False).encode("utf-8"),
+                    file_name="cfb_market_discrepancies.csv",mime="text/csv")
+                st.info("The 2025 backtest did not establish a betting edge. Large model-market gaps can reflect weaknesses in our simple score-only ratings. PASS without independent verification.")
+            else:
+                st.info("No usable, recent model-to-market comparisons available. This does not imply the games have no betting lines.")
+        else:
+            st.info("ESPN did not provide a usable sportsbook line snapshot. No market comparisons or bets can be inferred.")
+    else:
+        st.info("Load an upcoming schedule to check whether any indicative market lines are available.")
     choices={f"{r.away_team} @ {r.home_team} — {r.kickoff_utc:%b %d, %I:%M %p} UTC [{r.game_id}]":r.game_id for _,r in upcoming.iterrows()}
     selected=st.selectbox("Evaluate one game",list(choices))
     r=upcoming[upcoming.game_id==choices[selected]].iloc[0]
