@@ -14,7 +14,7 @@ import streamlit as st
 from .data import fetch_public_years
 from .schedule import fetch_upcoming_schedule
 from .tonight import tonight_slate
-from .vegas import fetch_vegas_spreads, match_fresh_spreads
+from .vegas import fetch_vegas_spreads, match_fresh_spreads, explain_unmatched_vegas
 from ui_timezone import format_central, CENTRAL
 
 
@@ -80,7 +80,7 @@ def render_tonight_ui():
     if st.button("Refresh tonight’s games + Vegas spreads",key="cfb_tonight_refresh",
                  type="primary",use_container_width=True):
         for key in ("cfb_tonight_rows","cfb_tonight_at","cfb_tonight_error",
-                    "cfb_tonight_vegas_error"):
+                    "cfb_tonight_vegas_error","cfb_tonight_vegas_diagnostics"):
             st.session_state.pop(key,None)
         try:
             games=st.session_state.get("cfb_games")
@@ -100,7 +100,9 @@ def render_tonight_ui():
                     with st.spinner("Fetching recent US sportsbook spread quotes (one Odds API request)..."):
                         odds,remaining=fetch_vegas_spreads(key)
                         fresh=match_fresh_spreads(schedule,odds)
+                        diagnostics=explain_unmatched_vegas(schedule,odds)
                     st.session_state.cfb_tonight_quota=remaining
+                    st.session_state.cfb_tonight_vegas_diagnostics=diagnostics
                 except Exception as exc:
                     # A failed sportsbook request never blocks projections.
                     st.session_state.cfb_tonight_vegas_error=str(exc)
@@ -146,7 +148,12 @@ def render_tonight_ui():
     st.caption(f"Refreshed {format_central(fetched)} · {age:.0f} minutes ago"
                + (f" · Odds API requests remaining: {st.session_state.cfb_tonight_quota}" if st.session_state.get("cfb_tonight_quota") else ""))
     if age>15:
-        st.warning("Vegas prices from this refresh may be stale. Refresh again before using market comparisons.")
+        st.warning("Cached sportsbook prices are older than 15 minutes. They will only appear as labeled historical references; refresh before assessing current lines.")
+    diagnostic=st.session_state.get("cfb_tonight_vegas_diagnostics",{})
+    if isinstance(diagnostic,dict):
+        st.caption("Odds API events returned: "+
+                   str(diagnostic.get("events_returned","?"))+
+                   " · Unmatched games explain their exclusions below. No further API call is used for diagnostics.")
     if st.session_state.get("cfb_tonight_missing_years"):
         st.caption("Historical coverage incomplete: "+", ".join(map(str,st.session_state.cfb_tonight_missing_years)))
     st.markdown("### Matchups")
@@ -160,21 +167,53 @@ def render_tonight_ui():
             vs.markdown("**@**")
             ht.markdown(f"**{escape(str(r.home_team))}**")
             with hl:_logo(r.home_espn_id)
-            is_fresh=(str(r.market_verification)=="ODDS_API_FRESH" and
-                      pd.notna(r.market_home_handicap) and
-                      age+float(r.market_oldest_quote_minutes or 0)<=15)
+            quote_age=pd.to_numeric(r.market_oldest_quote_minutes,errors="coerce")
+            total_age=age+float(quote_age) if pd.notna(quote_age) else float("inf")
+            origin=str(r.market_verification)
+            quoted=pd.notna(r.market_home_handicap)
+            is_fresh=(origin=="ODDS_API_FRESH" and quoted and total_age<=15)
+            book_reference=(origin in ("ODDS_API_FRESH","ODDS_API_OLDER_REFERENCE")
+                            and quoted and not is_fresh and total_age<=180)
+            espn_reference=(origin=="UNVERIFIED ESPN SCOREBOARD SNAPSHOT" and quoted)
+            if is_fresh:
+                line_label="VEGAS SPREAD · CURRENT SNAPSHOT"
+            elif book_reference:
+                line_label=f"BOOK REFERENCE · {total_age:.0f} MIN OLD"
+            elif espn_reference:
+                line_label="ESPN REFERENCE · UNVERIFIED"
+            else:
+                line_label="VEGAS SPREAD · UNAVAILABLE"
             left,right=st.columns(2)
-            left.caption("VEGAS SPREAD · "+("Fresh" if is_fresh else "Unavailable"))
-            left.markdown("**"+(display_spread(r.home_team,r.away_team,r.market_home_handicap)
-                            if is_fresh else "Unavailable")+"**")
+            left.caption(line_label)
+            if is_fresh or book_reference or espn_reference:
+                left.markdown("**"+display_spread(r.home_team,r.away_team,r.market_home_handicap)+"**")
+            else:
+                left.markdown("**Unavailable**")
             right.caption("OUR MODEL SPREAD")
             right.markdown("**"+model_spread(r.home_team,r.away_team,r.projected_home_margin)+"**")
             if is_fresh:
                 st.caption(str(r.market_provider)+" · "+
                            str(int(r.market_book_count))+" fresh book(s) · "+
-                           f"Spread difference {r.spread_disagreement_points:+.1f} pts")
+                           f"Model-line difference {r.spread_disagreement_points:+.1f} pts")
+            elif book_reference:
+                st.caption(str(r.market_provider)+" · Older sportsbook reference only; "+
+                           f"model-line difference {r.spread_disagreement_points:+.1f} pts. DO NOT treat as a live line.")
+            elif espn_reference:
+                st.caption(str(r.market_provider)+" · ESPN scoreboard snapshot; "+
+                           "not an independently verified sportsbook price or actionable spread.")
             else:
-                st.caption("No independently matched US sportsbook spread within 15 minutes.")
+                reason=diagnostic.get("per_game",{}).get(str(r.game_id)) if isinstance(diagnostic,dict) else None
+                codes={
+                    "NOT_IN_FEED_OR_TEAM_NAME_MISMATCH":"Event missing from Odds API or team names did not match ESPN aliases",
+                    "KICKOFF_MISMATCH":"Odds API kickoff did not match the ESPN event",
+                    "AMBIGUOUS_DUPLICATE_EVENTS":"Multiple sportsbook events matched; safely withheld",
+                    "NO_SPREAD_MARKET_IN_API_RESPONSE":"No US spread market in the returned event",
+                    "NO_USABLE_QUOTE_TIMESTAMP":"The feed did not provide a reliable market-update time",
+                    "QUOTES_OVER_180_MIN_OLD_OR_FUTURE_DATED":"Returned quotes were too old or future-dated",
+                    "QUOTES_OLDER_THAN_15_MIN":"Bookmaker updates are older than 15 minutes",
+                    "SPREAD_OUTCOME_OR_SIGN_UNMATCHED":"Team outcome names or signed spread values failed validation",
+                }
+                st.caption("Line unavailable · "+codes.get(reason,"No safely matched sportsbook spread")+".")
             st.caption(f"Projected score: {r.away_team} {r.projected_away_score:.0f}  ·  {r.home_team} {r.projected_home_score:.0f}  |  Total {r.projected_total:.1f}")
             confidence=str(r.research_confidence)
             color=str(r.confidence_color)
