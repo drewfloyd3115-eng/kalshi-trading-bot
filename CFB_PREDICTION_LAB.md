@@ -131,3 +131,10 @@ python -m cfb_model.cli benchmark --predictions data/pregame_predictions.csv --h
 ```
 
 If historical lines aren't accessible, the honest result is **benchmark not yet measured**, not a made-up result.
+
+
+### CFBD provider availability troubleshooting
+
+The historical line API may contain no `consensus` entries for a given year. When loading 2025, **check historical provider availability** first. This makes one user-triggered `/lines?year=2025` request without a provider filter, reports returned game count and available book-provider coverage, and retains the source records temporarily in the Streamlit session. Next choose **Auto (best coverage)** or one available named provider and tap **Load available closing lines (no new API request)**. Auto selects **one bookmaker** for the season by count of usable records (fixed provider-name tie-break), never by outcomes, projected model edges or winning bets.
+
+If no usable providers exist, the app gives an explicit diagnostic; it does not manufacture historical lines or silently substitute another year. An explicitly selected absent provider fails with available alternatives. Market closing lines are not timestamped executable contracts, and none of these diagnostics establishes profitability. Keep `CFBD_API_KEY` in Streamlit Secrets only.
