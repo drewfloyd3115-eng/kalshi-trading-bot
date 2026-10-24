@@ -68,3 +68,35 @@ def research_confidence(home_sample: int, away_sample: int,
     if reasons:
         return ("LOW","red","; ".join(reasons)+"; injuries and weather not modeled")
     return ("CAUTIOUS","amber","Multiple fresh books and sufficient team results, but model is uncalibrated and excludes injuries/weather")
+
+
+def model_evidence_quality(home_sample: int, away_sample: int,
+                           margin_sigma: float, total_sigma: float,
+                           reference_home_handicap=None) -> tuple[str,str,str]:
+    """Source-independent evidence rating, explicitly NOT betting confidence.
+
+    The historical 2025 baseline underperformed market lines: no HIGH/GREEN
+    label is supported. This grade reflects only available score history,
+    uncertainty and documented weakness with 21+ point favorites.
+    Missing sportsbook quotes must not affect this assessment.
+    """
+    if home_sample < 0 or away_sample < 0:
+        raise ValueError("Negative team sample count")
+    residuals = np.asarray([margin_sigma,total_sigma],dtype=float)
+    if not np.isfinite(residuals).all() or (residuals<=0).any():
+        return ("INSUFFICIENT","neutral","Model residual uncertainty unavailable; no injury/QB/weather inputs")
+    reasons=[]
+    if min(home_sample,away_sample)<3:
+        reasons.append("fewer than 3 earlier games for one or both teams")
+    if margin_sigma >= 20:
+        reasons.append("high historical spread-error dispersion")
+    if (reference_home_handicap is not None and
+        pd.notna(reference_home_handicap) and
+        abs(float(reference_home_handicap)) >= 21):
+        reasons.append("21+ point favorite: 2025 model weakness")
+    if reasons:
+        return ("LOW","red","; ".join(reasons)+
+                "; injury/QB/weather/efficiency data missing")
+    return ("PRELIMINARY","amber",
+            f"Team samples {home_sample}/{away_sample}; model margin uncertainty ±{margin_sigma:.1f} points (1σ). "
+            "Historical market comparison remains unfavorable; injuries, QB, weather and EPA not modeled")
