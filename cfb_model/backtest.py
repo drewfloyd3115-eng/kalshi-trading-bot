@@ -37,6 +37,10 @@ def evaluate_quote_history(predictions:pd.DataFrame, quotes:pd.DataFrame):
         raise ValueError("Quote file missing: "+", ".join(sorted(cols-set(quotes.columns))))
     q=quotes.copy()
     q["game_id"]=q["game_id"].astype(str)
+    for ts in q.captured_utc:
+        parsed=pd.Timestamp(ts)
+        if pd.isna(parsed) or parsed.tzinfo is None:
+            raise ValueError("Quote timestamps must be valid and timezone-aware")
     q["captured_utc"]=pd.to_datetime(q.captured_utc,utc=True,errors="coerce")
     if q["captured_utc"].isna().any():raise ValueError("Quote timestamps must be timezone-aware")
     p=predictions.copy()
@@ -47,6 +51,16 @@ def evaluate_quote_history(predictions:pd.DataFrame, quotes:pd.DataFrame):
     m=q.merge(p,on="game_id",how="left",validate="many_to_one",indicator=True)
     if (m._merge!="both").any(): raise ValueError("Quote game_id does not match the games dataset")
     if (m.captured_utc>=m.kickoff_utc).any():raise ValueError("Lookahead/post-kickoff quote detected")
+    # Even pre-kickoff quotes cannot be compared with models that incorporated
+    # game outcomes not yet available at the quote capture time.
+    known_at=pd.to_datetime(m.latest_result_available_utc,utc=True)
+    if (known_at.notna() & (known_at > m.captured_utc)).any():
+        raise ValueError("Lookahead: model used a result not known at quote capture")
+    if m.market_ticker.isna().any() or m.market_ticker.astype(str).str.strip().eq("").any():
+        raise ValueError("Missing exact market ticker")
+    if (pd.to_numeric(m.ask_cents,errors="coerce").isna().any() or
+        (~pd.to_numeric(m.ask_cents).between(.01,99.99)).any()):
+        raise ValueError("Invalid historical contract ask")
     if ((~m.completed) | (~m.eligible_history)).any():
         raise ValueError("Only completed games with sufficient past training history allowed")
     records=[]

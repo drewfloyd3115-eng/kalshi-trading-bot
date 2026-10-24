@@ -17,9 +17,11 @@ def parse_games(raw: list[dict]) -> pd.DataFrame:
         home = g.get("homeTeam", g.get("home_team"))
         away = g.get("awayTeam", g.get("away_team"))
         kickoff = g.get("startDate", g.get("kickoff_utc"))
-        # FBS-only: if division data is provided, reject FCS matchups.
-        if (g.get("homeDivision") not in (None, "fbs", "FBS") or
-                g.get("awayDivision") not in (None, "fbs", "FBS")):
+        # Official CFBD schema uses homeClassification / awayClassification.
+        # Never silently mix FCS results into the FBS-only baseline.
+        home_class = g.get("homeClassification", g.get("homeDivision"))
+        away_class = g.get("awayClassification", g.get("awayDivision"))
+        if str(home_class).lower() != "fbs" or str(away_class).lower() != "fbs":
             continue
         if not home or not away or not kickoff or home == away:
             continue
@@ -68,7 +70,7 @@ def fetch_year(year: int, token: str, session=None) -> pd.DataFrame:
     if not token:
         raise ValueError("CFBD_API_KEY is required; do not store the API key in GitHub")
     session = session or requests
-    response = session.get(CFBD_URL, params={"year": int(year), "division": "fbs"},
+    response = session.get(CFBD_URL, params={"year": int(year), "classification": "fbs"},
                            headers={"Authorization": f"Bearer {token}"}, timeout=30)
     response.raise_for_status()
     return parse_games(response.json())
@@ -83,3 +85,48 @@ def fetch_years(start: int, end: int, token: str) -> pd.DataFrame:
 
 def read_games_csv(uploaded) -> pd.DataFrame:
     return normalize_games(pd.read_csv(uploaded))
+
+# Public season scoreboards: https://github.com/jackwarfield/cfb_rankings
+# Third-party research fallback. Not an official CFBD source.
+PUBLIC_GAMES_BASE = "https://raw.githubusercontent.com/jackwarfield/cfb_rankings/main"
+
+
+def parse_public_games_csv(content: str) -> pd.DataFrame:
+    """Adapt raw public scoreboards to FBS-only games, no invented outcomes."""
+    df = pd.read_csv(io.StringIO(content))
+    required = {"id","season","week","start_date","neutral_site","home_team",
+                "away_team","home_points","away_points","home_level","away_level"}
+    if not required.issubset(df.columns):
+        raise ValueError("Public scoreboard missing fields: " + ", ".join(sorted(required-set(df.columns))))
+    df = df.loc[df.home_level.astype(str).str.lower().eq("fbs") &
+                df.away_level.astype(str).str.lower().eq("fbs")].copy()
+    # No final-status field in this source: withhold recent games even if scores
+    # appear, so in-progress numbers cannot become training results.
+    kickoff = pd.to_datetime(df.start_date,utc=True,errors="coerce")
+    completed = df.home_points.notna() & df.away_points.notna() & (
+        kickoff + pd.Timedelta(hours=8) <= pd.Timestamp.now(tz="UTC"))
+    converted = pd.DataFrame({
+        "game_id":df["id"].astype(str),
+        "season":df["season"], "week":df["week"],
+        "kickoff_utc":df["start_date"],
+        "home_team":df["home_team"], "away_team":df["away_team"],
+        "home_points":df["home_points"].where(completed),
+        "away_points":df["away_points"].where(completed),
+        "completed":completed, "neutral_site":df["neutral_site"]})
+    return normalize_games(converted)
+
+
+def fetch_public_years(start: int = 2020, end: int = 2026, session=None) -> pd.DataFrame:
+    """Fetch real free FBS result CSVs; missing season fails the entire import."""
+    if start < 2020 or end > 2026 or end < start or end - start > 6:
+        raise ValueError("Public data source currently covers 2020–2026 only")
+    session = session or requests
+    parts=[]
+    for year in range(start,end+1):
+        response=session.get(f"{PUBLIC_GAMES_BASE}/games{year}.csv",timeout=30)
+        response.raise_for_status()
+        part=parse_public_games_csv(response.text)
+        if part.empty or not part.season.eq(year).all():
+            raise ValueError(f"Public scoreboard {year} is empty or misdated")
+        parts.append(part)
+    return normalize_games(pd.concat(parts,ignore_index=True))

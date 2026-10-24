@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 import pandas as pd
-from .data import fetch_years, read_games_csv
+from .data import fetch_years, fetch_public_years, read_games_csv
 from .core import walk_forward
 from .backtest import score_predictions, evaluate_quote_history
 
@@ -16,6 +16,10 @@ def main(argv=None):
     sync.add_argument("--start",type=int,default=2018)
     sync.add_argument("--end",type=int,default=2026)
     sync.add_argument("--out",default="data/cfbd_games.csv")
+    pub=subs.add_parser("sync-public",help="Fetch free public FBS game scores (2020–2026)")
+    pub.add_argument("--start",type=int,default=2020)
+    pub.add_argument("--end",type=int,default=2026)
+    pub.add_argument("--out",default="data/fbs_public_games.csv")
     run=subs.add_parser("backtest",help="Walk-forward projections and historical accuracy")
     run.add_argument("--games",required=True)
     run.add_argument("--holdout-year",type=int,default=2025)
@@ -28,6 +32,11 @@ def main(argv=None):
         Path(a.out).parent.mkdir(parents=True,exist_ok=True)
         data.to_csv(a.out,index=False)
         print(f"Saved {len(data)} real fixtures to {a.out}")
+    elif a.command=="sync-public":
+        data=fetch_public_years(a.start,a.end)
+        Path(a.out).parent.mkdir(parents=True,exist_ok=True)
+        data.to_csv(a.out,index=False)
+        print(f"Saved {len(data)} real public FBS fixtures to {a.out} (source: jackwarfield/cfb_rankings)")
     elif a.command=="backtest":
         games=read_games_csv(a.games)
         pre,model=walk_forward(games)

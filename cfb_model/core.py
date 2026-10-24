@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import erf, sqrt
 from statistics import pstdev
+from datetime import timedelta
+import heapq
 import pandas as pd
 from .data import normalize_games
 
@@ -110,12 +112,25 @@ class PowerModel:
         self.trained_games += 1
 
 
-def walk_forward(games: pd.DataFrame, min_history: int = 300):
-    """Returns pregame predictions plus final fitted model. Never scores with future inputs."""
+def walk_forward(games: pd.DataFrame, min_history: int = 300, result_delay_hours: int = 8):
+    """Timestamped forecasts. Delay outcomes for 8 hours to prevent intraday leakage.
+
+    Actual game-completion timestamps are not provided in the basic data feed.
+    """
+    if result_delay_hours < 4:
+        raise ValueError("At least four hours of result publication delay required")
     games = normalize_games(games)
     model = PowerModel()
     rows = []
+    pending = []
+    latest_result_available_utc = None
     for _, g in games.iterrows():
+        while pending and pending[0][0] <= g.kickoff_utc:
+            known_time, _, previous = heapq.heappop(pending)
+            model.update(previous.home_team, previous.away_team,
+                         float(previous.home_points), float(previous.away_points),
+                         bool(previous.neutral_site))
+            latest_result_available_utc = known_time
         model.new_season(int(g.season))
         pred = model.forecast(g.home_team, g.away_team, bool(g.neutral_site))
         row = {"game_id": g.game_id, "season": int(g.season), "week": int(g.week),
@@ -125,8 +140,16 @@ def walk_forward(games: pd.DataFrame, min_history: int = 300):
                "home_win_prob": pred.home_win_prob, "margin_sigma":pred.margin_sigma,
                "total_sigma":pred.total_sigma,"training_games":pred.training_games,
                "home_sample":pred.home_sample,"away_sample":pred.away_sample,
+               "latest_result_available_utc":latest_result_available_utc,
                "home_points":g.home_points,"away_points":g.away_points}
         rows.append(row)
         if g.completed:
-            model.update(g.home_team, g.away_team, float(g.home_points), float(g.away_points), bool(g.neutral_site))
+            available_at = g.kickoff_utc + timedelta(hours=result_delay_hours)
+            heapq.heappush(pending, (available_at, str(g.game_id), g))
+    # Complete remaining updates for an optional future forecast.
+    while pending:
+        _, _, previous = heapq.heappop(pending)
+        model.update(previous.home_team, previous.away_team,
+                     float(previous.home_points), float(previous.away_points),
+                     bool(previous.neutral_site))
     return pd.DataFrame(rows), model

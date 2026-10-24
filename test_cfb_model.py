@@ -2,7 +2,7 @@ import io
 import unittest
 from datetime import datetime,timedelta,timezone
 import pandas as pd
-from cfb_model.data import COLUMNS, normalize_games, parse_games, fetch_year
+from cfb_model.data import COLUMNS, normalize_games, parse_games, fetch_year, parse_public_games_csv, fetch_public_years
 from cfb_model.core import walk_forward, Forecast, PowerModel
 from cfb_model.backtest import score_predictions, evaluate_quote_history
 from cfb_model.value import taker_fee, evaluate, max_buy_price, from_orderbook, historical_outcome
@@ -47,6 +47,52 @@ class ModelTests(unittest.TestCase):
         parsed=parse_games(data)
         self.assertEqual(parsed.home_team.iloc[0],'Oregon')
         self.assertEqual(parsed.home_points.iloc[0],28)
+    def test_current_cfbd_fbs_fields_and_query(self):
+        from unittest.mock import Mock
+        sample=[{'id':124,'season':2025,'week':3,
+                 'startDate':'2025-09-14T16:00:00.000Z',
+                 'homeTeam':'Oregon','awayTeam':'Utah','homePoints':28,
+                 'awayPoints':14,'completed':True,
+                 'homeClassification':'fbs','awayClassification':'fbs'},
+                {'id':125,'season':2025,'week':3,
+                 'startDate':'2025-09-14T17:00:00.000Z',
+                 'homeTeam':'Oregon','awayTeam':'Montana','homePoints':35,
+                 'awayPoints':7,'completed':True,
+                 'homeClassification':'fbs','awayClassification':'fcs'}]
+        session=Mock()
+        session.get.return_value.json.return_value=sample
+        df=fetch_year(2025,'safe-secret',session=session)
+        self.assertEqual(len(df),1)
+        self.assertEqual(df.away_team.iloc[0],'Utah')
+        self.assertEqual(session.get.call_args.kwargs['params'],{'year':2025,'classification':'fbs'})
+
+    def test_public_scoreboard_parser_and_source(self):
+        from unittest.mock import Mock
+        text=('id,season,week,start_date,neutral_site,home_team,away_team,home_points,away_points,home_level,away_level\n'
+              '11,2025,1,2025-08-30T16:00:00+00:00,False,Michigan,Indiana,42,31,fbs,fbs\n'
+              '12,2025,1,2025-08-30T17:00:00+00:00,False,Michigan,Nicholls,35,14,fbs,fcs\n')
+        rows=parse_public_games_csv(text)
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows.home_points.iloc[0],42)
+        ss=Mock()
+        ss.get.return_value.text=text.replace('2025','2026').replace('2025-08','2026-08')
+        rows=fetch_public_years(2026,2026,session=ss)
+        self.assertEqual(len(rows),1)
+        self.assertIn('games2026.csv',ss.get.call_args.args[0])
+
+    def test_overlapping_game_scores_are_never_known_at_kickoff(self):
+        start=datetime(2025,9,6,16,tzinfo=timezone.utc)
+        first=game(100,season=2025,hp=100,ap=0)
+        second=game(101,season=2025)
+        third=game(102,season=2025)
+        first['kickoff_utc']=start.isoformat()
+        second['kickoff_utc']=(start+timedelta(hours=3)).isoformat()
+        third['kickoff_utc']=(start+timedelta(hours=9)).isoformat()
+        p,_=walk_forward(pd.DataFrame([first,second,third]),min_history=0)
+        self.assertEqual(p.training_games.astype(int).tolist(),[0,0,1])
+        self.assertAlmostEqual(p.iloc[0].projected_home_margin,p.iloc[1].projected_home_margin)
+        self.assertNotAlmostEqual(p.iloc[1].projected_home_margin,p.iloc[2].projected_home_margin)
+
     def test_fetch_requires_key(self):
         with self.assertRaisesRegex(ValueError,'CFBD_API_KEY'):
             fetch_year(2025,'')
@@ -86,6 +132,26 @@ class Values(unittest.TestCase):
         q['captured_utc']=row.kickoff_utc+pd.Timedelta(minutes=1)
         with self.assertRaisesRegex(ValueError,'Lookahead'):
             evaluate_quote_history(pre,q)
+    def test_quote_must_be_after_last_known_training_result(self):
+        first=game(0)
+        second=game(1)
+        pre,_=walk_forward(pd.DataFrame([first,second]),min_history=1)
+        row=pre.iloc[1]
+        capture=pd.Timestamp(first['kickoff_utc'])-pd.Timedelta(hours=1)
+        q=pd.DataFrame([dict(game_id=str(row.game_id),captured_utc=capture,
+             outcome='HOME_WIN',line=None,ask_cents=48,shares=10,
+             market_ticker='VALID',fee_multiplier=1)])
+        with self.assertRaisesRegex(ValueError,'Lookahead'):
+            evaluate_quote_history(pre,q)
+
+    def test_naive_historical_quote_timestamp_rejected(self):
+        pre,_=walk_forward(pd.DataFrame([game(0),game(1)]),min_history=1)
+        q=pd.DataFrame([dict(game_id='1',captured_utc='2024-09-01 03:00:00',
+             outcome='HOME_WIN',line=None,ask_cents=48,shares=10,
+             market_ticker='VALID',fee_multiplier=1)])
+        with self.assertRaisesRegex(ValueError,'timezone-aware'):
+            evaluate_quote_history(pre,q)
+
     def test_backtest_duplicates(self):
         p,_=walk_forward(pd.DataFrame([game(0),game(1)]),min_history=1)
         q=pd.DataFrame([dict(game_id='1',captured_utc='2024-09-01T00:00:00Z',outcome='OVER',line=44.5,ask_cents=50,shares=10,market_ticker='TEST',fee_multiplier=1)]*2)

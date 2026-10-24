@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 from .core import walk_forward, Forecast
-from .data import read_games_csv, fetch_years, COLUMNS
+from .data import read_games_csv, fetch_years, fetch_public_years, COLUMNS
 from .backtest import score_predictions
 from .value import evaluate, from_orderbook, taker_fee
 
@@ -21,8 +21,16 @@ def render_model_ui():
     st.title("CFB Prediction Lab")
     st.caption("Historical-results baseline · independently tested forecasts · PAPER ONLY · no orders")
     st.warning("This baseline has NOT demonstrated a profitable edge. Incomplete data, a kickoff already passed, unverified contract rules, or stale quotes must result in PASS.")
-    source=st.radio("Real-game data source",["Upload existing CFBD CSV","Fetch from CollegeFootballData"],horizontal=True)
-    if source.startswith("Upload"):
+    source=st.radio("Real-game data source",["Public FBS scores (no key)","Upload existing CFBD CSV","Fetch from CollegeFootballData"],horizontal=False)
+    if source.startswith("Public"):
+        st.caption("Free public scoreboard: jackwarfield/cfb_rankings on GitHub (2020–2026). Third-party; excludes FCS matchups and scores from games less than 8 hours old.")
+        if st.button("Load 2020–2026 public FBS scores",key="cfb_public_fetch"):
+            try:
+                with st.spinner("Downloading real historical results from public GitHub CSVs..."):
+                    st.session_state.cfb_games=fetch_public_years(2020,2026)
+                st.success(f"Loaded {len(st.session_state.cfb_games):,} real FBS matchups")
+            except Exception as exc:st.error(f"Public data fetch failed: {exc}")
+    elif source.startswith("Upload"):
         upload=st.file_uploader("CFBD games CSV (real data, unique game IDs)",type=["csv"],key="cfb_data_file")
         if upload is not None:
             try:
@@ -43,7 +51,7 @@ def render_model_ui():
                 st.success(f"Fetched {len(st.session_state.cfb_games):,} games (API calls used).")
             except Exception as exc:st.error(f"Data fetch failed: {exc}")
     if "cfb_games" not in st.session_state:
-        st.info("No games loaded. Import a REAL historical CFBD games CSV or connect a CFBD API key. No fabricated predictions will be shown.")
+        st.info("No games loaded. Load public FBS scores, import a real games CSV or connect a CFBD API key. No fabricated predictions will be shown.")
         st.download_button("Download CSV column template",pd.DataFrame(columns=COLUMNS).to_csv(index=False),file_name="cfbd_games_template.csv")
         return
     games=st.session_state.cfb_games
