@@ -14,7 +14,7 @@ from paper_history import summary as paper_summary, HISTORY_COLUMNS
 from position_ledger import ledger_summary, empty_ledger
 
 
-PAGES = ["Home", "Opportunities", "Market Detail", "Portfolio", "CFB Model", "Research"]
+PAGES = ["Home", "Tonight CFB", "Opportunities", "Market Detail", "Portfolio", "CFB Model", "Research"]
 CARD_COLUMNS = ["league", "event", "outcome_team", "ticker", "side", "fair_pct",
                 "ask_cents", "net_edge_pp_1share", "books", "book_spread_pp",
                 "oldest_quote_minutes", "quote_quality", "depth_status",

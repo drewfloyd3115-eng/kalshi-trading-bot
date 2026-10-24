@@ -78,3 +78,8 @@ CFB Model → Historical sportsbook benchmark now uses a manual **Check provider
 ### CFB error diagnostics
 
 After loading historical sportsbook benchmark lines, open **Why our model trails the sportsbook — diagnostic audit** in the CFB Model tab. The app breaks down matching-game spread/total errors by season phase, favorite size, sportsbook disagreement and total bands, and provides downloadable CSV evidence. This is **descriptive post-hoc analysis**, not parameter tuning or evidence of profitable trading. The live model is unchanged pending earlier-season training and fresh out-of-sample testing.
+
+
+## Tonight CFB — fast Saturday research (Central Time)
+
+Open **Tonight CFB** from the Streamlit navigation. Tap **Refresh tonight's remaining FBS games** once. The app reuses the public historical-score dataset already loaded in this session where possible, otherwise retrieves real FBS results, fetches just the next day's ESPN FBS schedule using **single-date** requests, and filters kickoff times to **the current Central calendar day after 5:00 PM** (excluding started games). No CFBD or paid Odds API query is used. A second refresh updates to a fresh schedule; snapshots more than 30 minutes old are flagged stale. Optional sportsbook snapshot lines from ESPN are labelled unverified; no prices are invented. The screen shows scores, win probabilities, model/book point discrepancies, and a conservative **PASS — NO VERIFIED POSITIVE EV** status. Download the research CSV for auditing, retaining UTC timestamps. Historical 2025 spread/total benchmark shows this model is not yet better than bookmakers, particularly for large favorites. This is a research interface, NOT a betting recommendation or trade executor.

@@ -192,6 +192,9 @@ elif page == "Portfolio":
 elif page == "CFB Model":
     from cfb_model.ui import render_model_ui
     render_model_ui()
+elif page == "Tonight CFB":
+    from cfb_model.tonight_ui import render_tonight_ui
+    render_tonight_ui()
 else:
     if "quick_results" in st.session_state:
         summary = st.session_state.quick_results
