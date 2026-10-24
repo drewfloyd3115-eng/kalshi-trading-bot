@@ -117,16 +117,29 @@ def parse_public_games_csv(content: str) -> pd.DataFrame:
 
 
 def fetch_public_years(start: int = 2020, end: int = 2026, session=None) -> pd.DataFrame:
-    """Fetch real free FBS result CSVs; missing season fails the entire import."""
+    """Fetch genuine FBS results; disclose source gaps rather than fabricate games.
+
+    The third-party 2022 file is currently header-only. Missing seasons are
+    excluded and carried as DataFrame metadata for a prominent UI warning.
+    Other data corruption, HTTP errors or mismatched season labels fail closed.
+    """
     if start < 2020 or end > 2026 or end < start or end - start > 6:
         raise ValueError("Public data source currently covers 2020–2026 only")
     session = session or requests
-    parts=[]
+    parts,missing = [],[]
     for year in range(start,end+1):
         response=session.get(f"{PUBLIC_GAMES_BASE}/games{year}.csv",timeout=30)
         response.raise_for_status()
         part=parse_public_games_csv(response.text)
-        if part.empty or not part.season.eq(year).all():
-            raise ValueError(f"Public scoreboard {year} is empty or misdated")
+        if part.empty:
+            missing.append(year)
+            continue
+        if not part.season.eq(year).all():
+            raise ValueError(f"Public scoreboard {year} has records from another season")
         parts.append(part)
-    return normalize_games(pd.concat(parts,ignore_index=True))
+    if not parts:
+        raise ValueError(f"No actual FBS games available for requested seasons {start}–{end}")
+    result=normalize_games(pd.concat(parts,ignore_index=True))
+    result.attrs["missing_seasons"] = missing
+    result.attrs["source"] = "jackwarfield/cfb_rankings (public third-party scoreboard)"
+    return result
