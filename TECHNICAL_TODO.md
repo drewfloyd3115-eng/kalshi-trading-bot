@@ -46,3 +46,12 @@ Personal-use CFB/NFL research and **paper-trading** roadmap. This is a technical
 - [ ] Independently validate quote age, executable sell bids, source-specific fees and NO-side real-market depth before producing any hold/sell recommendation.
 
 **Release gate:** Design and implement this as a **paper-only** capability first. Real trading, automated trading, and background notifications require separate security, data and risk review.
+
+
+## New 2026-10-24 CFB prediction-model prototype
+
+- [x] Add historical CFBD importer, chronological ratings, spreads/totals, analytic outcome probabilities, holdout MAE/Brier and optional pre-kickoff quote P&L audit.
+- [x] Add phone-oriented CFB Model page with read-only public Kalshi order-book checks and per-market settlement confirmation.
+- [ ] Supply real CFBD_API_KEY / import 2018-2026 history and complete 2025 out-of-sample evaluation; **no historical ROI claimed yet**.
+- [ ] Benchmark vs archived sportsbook closing lines, injury/weather and drive efficiency; calibrate probability distributions.
+- [ ] Obtain timestamped archived executable Kalshi quotes; paper-trade prospectively with validated market rules/fees before any real-money use.

@@ -47,3 +47,8 @@ streamlit run app.py
 GitHub Actions runs offline regression tests on push. The UI code and regression tests do not need an Odds API key. Use Streamlit Secrets to configure `ODDS_API_KEY` for an optional **user-initiated** sportsbook scan; never commit the key.
 
 No Firecrawl integration is required.
+
+
+## CFB Prediction Lab (new model tab)
+
+An independent historical-results baseline and holdout-season audit are available under **CFB Model**. Supply CFBD_API_KEY in Streamlit Secrets or upload a real CFBD games CSV. NO validated profitability or automatic trading. See [CFB_PREDICTION_LAB.md](CFB_PREDICTION_LAB.md) and run offline regression tests before use.
