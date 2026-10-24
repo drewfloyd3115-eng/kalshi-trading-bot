@@ -28,6 +28,7 @@ def render_model_ui():
             try:
                 with st.spinner("Downloading real historical results from public GitHub CSVs..."):
                     st.session_state.cfb_games=fetch_public_years(2020,2026)
+                    st.session_state.pop("cfb_schedule",None)
                 st.success(f"Loaded {len(st.session_state.cfb_games):,} real FBS matchups")
                 gaps=st.session_state.cfb_games.attrs.get("missing_seasons",[])
                 if gaps:
@@ -41,6 +42,7 @@ def render_model_ui():
         if upload is not None:
             try:
                 st.session_state.cfb_games=read_games_csv(upload)
+                st.session_state.pop("cfb_schedule",None)
                 st.success(f"Loaded {len(st.session_state.cfb_games):,} real-game rows")
             except Exception as exc:
                 st.error(f"CSV rejected: {exc}")
@@ -54,6 +56,7 @@ def render_model_ui():
             try:
                 with st.spinner("Loading historical FBS games from CFBD..."):
                     st.session_state.cfb_games=fetch_years(int(start_year),int(end_year),_key())
+                    st.session_state.pop("cfb_schedule",None)
                 st.success(f"Fetched {len(st.session_state.cfb_games):,} games (API calls used).")
             except Exception as exc:st.error(f"Data fetch failed: {exc}")
     if "cfb_games" not in st.session_state:
@@ -69,8 +72,40 @@ def render_model_ui():
     if games.empty:
         st.error("No real games in the dataset")
         return
+    # A historical scoreboard is not an authoritative forward schedule.
+    # Fetch scheduled events separately and require exact historical ESPN IDs.
+    team_ids=games.attrs.get("espn_team_ids",{})
+    if team_ids:
+        st.subheader("Load upcoming schedule")
+        st.caption("Read-only ESPN FBS scoreboard (unofficial API). Matchups must have exact ESPN team IDs in the historical source. No betting API, odds credits or automated orders.")
+        if st.button("Load upcoming 8 days of FBS games",key="cfb_load_schedule"):
+            st.session_state.pop("cfb_schedule",None)
+            try:
+                from .schedule import fetch_upcoming_schedule
+                with st.spinner("Fetching next 8 days of scheduled FBS games..."):
+                    schedule=fetch_upcoming_schedule(team_ids,days=8)
+                st.session_state.cfb_schedule=schedule
+                stats=schedule.attrs.get("stats",{})
+                st.success(f"Verified {len(schedule)} future FBS matchups from {stats.get('received','?')} scoreboard events.")
+                if stats.get("unmapped",0):
+                    st.caption(f"Excluded {stats['unmapped']} events with unknown FBS team IDs; no fuzzy team guessing.")
+            except Exception as exc:
+                st.warning(f"Upcoming schedule unavailable: {exc}. Historical evaluation is still available.")
+    else:
+        st.caption("No verified ESPN team-ID mapping in this dataset. To load upcoming games without guessing names, load the public FBS score source.")
+    schedule=st.session_state.get("cfb_schedule")
+    model_games=games
+    if isinstance(schedule,pd.DataFrame) and not schedule.empty:
+        known_ids=set(games.game_id.astype(str))
+        unseen=schedule.loc[~schedule.game_id.astype(str).str.replace(r"^espn-","",regex=True).isin(known_ids)].copy()
+        if not unseen.empty:
+            from .data import normalize_games
+            model_games=normalize_games(pd.concat([games,unseen],ignore_index=True))
+            st.caption(f"Added {len(unseen)} verified future schedule events to the model. Historical game outcomes remain unchanged.")
+        else:
+            st.info("The known historical dataset already includes these upcoming event IDs.")
     try:
-        predictions,_=walk_forward(games)
+        predictions,_=walk_forward(model_games)
     except Exception as exc:
         st.error(f"Model could not run: {exc}")
         return
@@ -86,7 +121,7 @@ def render_model_ui():
     now=pd.Timestamp.now(tz="UTC")
     upcoming=predictions.loc[(~predictions.completed)&(predictions.kickoff_utc>now)&(predictions.eligible_history)].copy()
     if upcoming.empty:
-        st.info("No future uncompleted games with 300+ historical training games. Update the dataset to include scheduled games.")
+        st.info("No eligible future games found. If you haven't yet loaded the upcoming ESPN schedule, use the button above. Started games, unknown team IDs and insufficient history are excluded.")
         return
     shown=upcoming[["kickoff_utc","away_team","home_team","projected_home_margin","projected_total","home_win_prob","training_games"]].copy()
     shown.home_win_prob=(shown.home_win_prob*100).round(1)
