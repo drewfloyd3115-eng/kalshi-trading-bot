@@ -78,6 +78,7 @@ class TonightCFBTests(unittest.TestCase):
         df=schedule()
         df.loc[0,"completed"]=True
         df.loc[0,"home_points"]=35
+        df.loc[0,"away_points"]=7
         with self.assertRaisesRegex(ValueError,"scored fixtures"):
             tonight_slate(source_games(),df,now=NOW)
         df=schedule(eid="900")
