@@ -92,8 +92,9 @@ def parse_cfbd_closing_lines(raw: list, provider: str = "consensus") -> pd.DataF
     for g in raw:
         if not isinstance(g, dict):
             continue
-        game_id = g.get("id", g.get("gameId"))
-        home, away = g.get("homeTeam"), g.get("awayTeam")
+        game_id = g.get("id", g.get("gameId", g.get("game_id")))
+        home = g.get("homeTeam", g.get("home_team"))
+        away = g.get("awayTeam", g.get("away_team"))
         if game_id is None or not home or not away or home == away:
             continue
         matching = [line for line in (g.get("lines") or [])
@@ -104,11 +105,11 @@ def parse_cfbd_closing_lines(raw: list, provider: str = "consensus") -> pd.DataF
         if len(matching) != 1:
             raise ValueError(f"Duplicate {provider} provider records for CFBD game {game_id}")
         line = matching[0]
-        spread = _formatted_home_handicap(line.get("formattedSpread"), home, away)
+        spread = _formatted_home_handicap(line.get("formattedSpread", line.get("formatted_spread")), home, away)
         reported = _numeric(line.get("spread"))
         if spread is not None and reported is not None and abs(abs(spread)-abs(reported)) > .01:
             raise ValueError(f"CFBD formatted/numeric spread discrepancy for game {game_id}")
-        total = _numeric(line.get("overUnder"))
+        total = _numeric(line.get("overUnder", line.get("over_under")))
         if spread is None and total is None:
             continue
         rows.append({"game_id": str(game_id), "home_team": str(home), "away_team": str(away),
