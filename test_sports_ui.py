@@ -176,9 +176,9 @@ class SportsUIAppSmokeTests(unittest.TestCase):
         self.assertFalse(at.exception, str(at.exception))
         nav = at.button_group(key="sports_nav")
         self.assertEqual(nav.value, "Home")
-        self.assertEqual(len(nav.options), 5)
+        self.assertEqual(len(nav.options), 6)
         for page in ("Opportunities", "Market Detail", "Portfolio",
-                     "Research", "Home"):
+                     "CFB Model", "Research", "Home"):
             at.button_group(key="sports_nav").set_value(page).run()
             self.assertFalse(at.exception, str(at.exception))
             self.assertEqual(at.session_state["sports_nav"], page)

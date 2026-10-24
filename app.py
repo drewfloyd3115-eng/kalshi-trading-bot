@@ -187,6 +187,9 @@ elif page == "Market Detail":
 elif page == "Portfolio":
     portfolio_page(float(st.session_state.get("quick_bankroll", DEFAULT_BANKROLL)),
                    float(st.session_state.get("quick_exposure", 0.0)))
+elif page == "CFB Model":
+    from cfb_model.ui import render_model_ui
+    render_model_ui()
 else:
     if "quick_results" in st.session_state:
         summary = st.session_state.quick_results
