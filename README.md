@@ -52,3 +52,7 @@ No Firecrawl integration is required.
 ## CFB Prediction Lab (new model tab)
 
 An independent historical-results baseline and holdout-season audit are available under **CFB Model**. Supply CFBD_API_KEY in Streamlit Secrets or upload a real CFBD games CSV. NO validated profitability or automatic trading. See [CFB_PREDICTION_LAB.md](CFB_PREDICTION_LAB.md) and run offline regression tests before use.
+
+## Upcoming CFB schedule (paper-only)
+
+In the **CFB Model** tab load the free public FBS scores, then select **Load upcoming 8 days of FBS games**. This fetches pregame ESPN schedule events using verified historical ESPN team IDs, with no credentials or bets. The model excludes started games and unidentified teams and shows an explicit error when ESPN data is unavailable. Predictions are **not validated profitable bets**. Details: [CFB_PREDICTION_LAB.md](CFB_PREDICTION_LAB.md).
