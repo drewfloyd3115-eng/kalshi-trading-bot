@@ -100,7 +100,9 @@ class CFBDHistoricalLineTests(unittest.TestCase):
         self.assertEqual(result["total_comparison"]["model_mae"],1.6)
         self.assertEqual(result["total_comparison"]["market_mae"],1.5)
         self.assertEqual(result["total_comparison"]["market_advantage_points"],-.1)
-        self.assertNotIn("roi",str(result).lower())
+        self.assertNotIn("roi",result)
+        self.assertNotIn("paper_pnl",result)
+        self.assertIn("No EV, ROI, CLV",result["source_warning"])
         self.assertEqual(table.iloc[0].actual_total,51)
 
     def test_exact_identity_only_and_zero_matches_rejected(self):
