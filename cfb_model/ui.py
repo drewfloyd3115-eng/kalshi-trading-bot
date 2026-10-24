@@ -7,6 +7,7 @@ import streamlit as st
 from .core import walk_forward, Forecast
 from .data import read_games_csv, fetch_years, fetch_public_years, COLUMNS
 from .backtest import score_predictions
+from .failure_audit import market_failure_audit
 from .historical_market import (calibration_table, benchmark_predictions,
                                 fetch_cfbd_line_inventory, parse_cfbd_closing_lines,
                                 normalize_closing_lines, LINE_COLUMNS)
@@ -217,6 +218,33 @@ def render_model_ui():
                     st.download_button("Download paired market benchmark CSV (UTC)",
                                        paired.to_csv(index=False).encode("utf-8"),
                                        file_name=f"cfb_market_benchmark_{test_year}.csv",mime="text/csv")
+                    with st.expander("Why our model trails the sportsbook — diagnostic audit",expanded=False):
+                        audit=market_failure_audit(paired)
+                        spreads=audit["summary"]["spread"]
+                        totals=audit["summary"]["total"]
+                        st.warning("2025 is now a RESEARCH/DIAGNOSIS set, not an untouched holdout for future changes. Do not tune to 2025 then claim 2025 as independent validation. No betting edge established.")
+                        st.caption(f"Matched games: {audit['summary']['paired_games']} · Sportsbook(s): {', '.join(audit['summary']['provider_names'])}. Positive 'book_advantage_points' means the BOOK predicted more accurately.")
+                        st.metric("Book's spread MAE advantage",f"{spreads['book_advantage_points']:+.2f} points" if spreads['book_advantage_points'] is not None else "Not available")
+                        st.metric("Book's total MAE advantage",f"{totals['book_advantage_points']:+.2f} points" if totals['book_advantage_points'] is not None else "Not available")
+                        sections=[
+                            ("Spread error by season phase", "by_week_spread"),
+                            ("Spread error by sportsbook favorite size", "by_favorite_spread"),
+                            ("Spread error by model-market disagreement", "by_disagreement_spread"),
+                            ("Total error by sportsbook total", "by_total_band"),
+                            ("15 largest model spread failures", "largest_spread_failures")
+                        ]
+                        for title,table_key in sections:
+                            st.write(f"**{title}**")
+                            detail=audit[table_key]
+                            if detail.empty:
+                                st.caption("Insufficient paired games in this category.")
+                            else:
+                                st.dataframe(detail,hide_index=True,use_container_width=True)
+                                st.download_button(f"Download {title} CSV",
+                                    detail.to_csv(index=False).encode("utf-8"),
+                                    file_name=f"cfb_{table_key}_{test_year}.csv",mime="text/csv",
+                                    key=f"cfb_audit_dl_{table_key}_{test_year}")
+                        st.caption("Large discrepancies are NOT positive expected value. Improving the baseline requires walk-forward training on earlier seasons and fresh untouched evaluation, not fitting to the displayed 2025 outcomes.")
                 except Exception as exc:
                     st.warning(f"Historical market comparison not available: {exc}")
         else:
