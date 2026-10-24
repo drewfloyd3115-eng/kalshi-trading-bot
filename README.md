@@ -92,3 +92,15 @@ The **Tonight CFB** tab now renders compact iPhone-friendly matchup cards: team 
 Tap **Refresh tonight’s games + Vegas spreads**. This makes one *optional* real Odds API request for `americanfootball_ncaaf / us / spreads` with your existing `ODDS_API_KEY` (consumes provider quota; it is not an automatic background scan). Only supported ESPN source aliases and kickoffs within 90 minutes match market events; each selected book must have both opposite spread outcomes, a last-update time no older than 15 minutes, and a consistent handicap sign. Multiple independent US book spreads display as a **median of N books**, with provenance and quote-age checks; unmatched/stale data say **Unavailable**, never an invented Vegas line. ESPN-only indicative lines are not promoted to current sportsbook prices. Team logos are from https://a.espncdn.com/i/teamlogos/ncaa/500/{numeric-id}.png for exact verified ESPN IDs, otherwise a generic football icon.
 
 Research-confidence badge colors: **gray Unverified** (missing fresh spreads), **red Low** (single book, limited team samples, huge disagreement or favorite at least 21 points), **amber Cautious** (multiple fresh books and stronger team-history coverage). There is deliberately **no green/high/profitable** badge because this historical score-only model underperformed the sportsbook on 2025 spreads and totals. Missing injuries, starting QBs, weather, EPA and pace are explicitly disclosed. Normal continuous simulations omit discrete scoring and push effects. Quote ages and app snapshot refresh determine whether a Vegas line is displayed as current. No trading or Kalshi order submission is added.
+
+
+### October 24 Vegas spread display correction
+
+The initial 15-minute quote-age gate made available sportsbook lines appear as `Unavailable` when games had not changed prices recently. **Tonight CFB** now distinguishes four cases after one user-triggered Odds API request:
+
+1. **VEGAS SPREAD · CURRENT SNAPSHOT:** a validated exact-team and kickoff match with a valid updated spread no more than 15 minutes old at render time.
+2. **BOOK REFERENCE · N MIN OLD:** an independently sourced sportsbook spread updated more than 15 minutes ago but at most 180 minutes ago. This is **not** a current quote or actionable betting price.
+3. **ESPN REFERENCE · UNVERIFIED:** no independently matched sportsbook line, but the ESPN scoreboard supplied an unverified indicative handicap. It is **not** called Vegas.
+4. **VEGAS SPREAD · UNAVAILABLE:** no validated source; a per-game diagnostic distinguishes unmatched team names, missing odds event, mismatched kickoff, absent spread market, absent timestamp, stale quote or invalid side/sign. A zero-event response shows zero, not a fictitious line.
+
+The app does **not** make additional paid API calls for diagnostics. A cached quote becomes labeled an older reference once the 15-minute cutoff is exceeded. Preview simulated covers only use validated current lines; older/ESPN references are display-only. All betting statuses remain **PASS**, as historical evidence does not establish a profitable edge. `ODDS_API_KEY` remains in Streamlit Secrets.

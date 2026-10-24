@@ -51,7 +51,7 @@ def _alias_set(values):
 
 
 def match_fresh_spreads(schedule: pd.DataFrame, odds_events: list,
-                        now=None, max_age_minutes: int=MAX_QUOTE_AGE_MINUTES) -> pd.DataFrame:
+                        now=None, max_age_minutes: int=180) -> pd.DataFrame:
     """Exact team alias+kickoff match, robust price sign and chronological checks.
 
     The output uses model data game IDs and signed HOME handicap. A median is
@@ -61,7 +61,7 @@ def match_fresh_spreads(schedule: pd.DataFrame, odds_events: list,
     now=_utc(now) if now is not None else pd.Timestamp.now(tz="UTC")
     if pd.isna(now):
         raise ValueError("Reference time must be timezone-aware")
-    if not (1<=max_age_minutes<=60):
+    if not (1<=max_age_minutes<=180):
         raise ValueError("Invalid quote-age threshold")
     if not isinstance(schedule,pd.DataFrame) or schedule.empty:
         return pd.DataFrame()
@@ -138,15 +138,74 @@ def match_fresh_spreads(schedule: pd.DataFrame, odds_events: list,
         for q in book_rows:unique.setdefault(q["key"],q)
         good=list(unique.values())
         if not good:continue
-        line=float(pd.Series([x["home_handicap"] for x in good]).median())
+        # Prefer only fresh quotes; if ALL are older, show them as a visibly
+        # aged research reference rather than quietly dropping all prices.
+        fresh=[q for q in good if q["age_minutes"]<=MAX_QUOTE_AGE_MINUTES]
+        selected=fresh if fresh else good
+        verified=bool(fresh)
+        line=float(pd.Series([x["home_handicap"] for x in selected]).median())
         rows.append({
             "game_id":game_id,"market_home_handicap":round(line,2),
-            "market_provider":("Median of "+str(len(good))+" US books" if len(good)>1
-                               else good[0]["name"]),
+            "market_provider":("Median of "+str(len(selected))+" US books" if len(selected)>1
+                               else selected[0]["name"]),
             "market_observed_utc":now.isoformat(),
-            "market_oldest_quote_minutes":round(max(q["age_minutes"] for q in good),1),
-            "market_book_count":len(good),
-            "market_verification":"ODDS_API_FRESH",
-            "book_details":good
+            "market_oldest_quote_minutes":round(max(q["age_minutes"] for q in selected),1),
+            "market_book_count":len(selected),
+            "market_verification":("ODDS_API_FRESH" if verified
+                                   else "ODDS_API_OLDER_REFERENCE"),
+            "book_details":selected
         })
     return pd.DataFrame(rows)
+
+
+def explain_unmatched_vegas(schedule: pd.DataFrame, odds_events: list,
+                           now=None) -> dict:
+    """Explain absent bookmaker lines without extra API calls or key exposure.
+
+    Categories describe source-data conditions; they do not claim that
+    sportsbooks have no real line. Never log full odds payloads or credentials.
+    """
+    clock=_utc(now) if now is not None else pd.Timestamp.now(tz="UTC")
+    if pd.isna(clock) or not isinstance(odds_events,list):
+        raise ValueError("Unable to diagnose missing sportsbook data")
+    aliases=schedule.attrs.get("espn_event_aliases",{})
+    reasons={}
+    for _,game in schedule.iterrows():
+        gid=str(game.game_id)
+        meta=aliases.get(gid,{})
+        home=_alias_set(meta.get("home",[]))|_alias_set([str(game.home_team)])
+        away=_alias_set(meta.get("away",[]))|_alias_set([str(game.away_team)])
+        named=[e for e in odds_events if isinstance(e,dict) and
+               str(e.get("home_team","")).strip().casefold() in home and
+               str(e.get("away_team","")).strip().casefold() in away]
+        if not named:
+            reasons[gid]="NOT_IN_FEED_OR_TEAM_NAME_MISMATCH"
+            continue
+        start=_utc(game.kickoff_utc)
+        aligned=[e for e in named if pd.notna(_utc(e.get("commence_time"))) and
+                 abs((_utc(e.get("commence_time"))-start).total_seconds())<=90*60]
+        if not aligned:
+            reasons[gid]="KICKOFF_MISMATCH"
+            continue
+        if len(aligned)!=1:
+            reasons[gid]="AMBIGUOUS_DUPLICATE_EVENTS"
+            continue
+        markets=[m for b in (aligned[0].get("bookmakers") or [])
+                 if isinstance(b,dict) for m in (b.get("markets") or [])
+                 if isinstance(m,dict) and m.get("key")=="spreads"]
+        if not markets:
+            reasons[gid]="NO_SPREAD_MARKET_IN_API_RESPONSE"
+            continue
+        # This initial reason tracks quote timestamps; actual outcome/sign validation
+        # happens in match_fresh_spreads, with a separate terminal reason.
+        ages=[(clock-t).total_seconds()/60 for m in markets
+              for t in [_utc(m.get("last_update"))] if pd.notna(t)]
+        if not ages:
+            reasons[gid]="NO_USABLE_QUOTE_TIMESTAMP"
+        elif not any(-2<=age<=180 for age in ages):
+            reasons[gid]="QUOTES_OVER_180_MIN_OLD_OR_FUTURE_DATED"
+        elif not any(-2<=age<=15 for age in ages):
+            reasons[gid]="QUOTES_OLDER_THAN_15_MIN"
+        else:
+            reasons[gid]="SPREAD_OUTCOME_OR_SIGN_UNMATCHED"
+    return {"events_returned":len(odds_events),"per_game":reasons}
