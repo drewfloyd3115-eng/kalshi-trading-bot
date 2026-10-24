@@ -73,3 +73,8 @@ Use the real **closing-lines CSV upload** route without a key or configure `CFBD
 ### CFBD historical-line provider diagnostics
 
 CFB Model → Historical sportsbook benchmark now uses a manual **Check provider availability** step for the selected year. CFBD does not guarantee every year has `consensus` lines. One unfiltered source request shows available provider coverage, then users choose an actual provider (or **Auto**, based only on record coverage) without more API calls. An empty response is honestly reported and never replaced with invented data. This screen remains paper-only and does not consume ODDS_API_KEY credits.
+
+
+### CFB error diagnostics
+
+After loading historical sportsbook benchmark lines, open **Why our model trails the sportsbook — diagnostic audit** in the CFB Model tab. The app breaks down matching-game spread/total errors by season phase, favorite size, sportsbook disagreement and total bands, and provides downloadable CSV evidence. This is **descriptive post-hoc analysis**, not parameter tuning or evidence of profitable trading. The live model is unchanged pending earlier-season training and fresh out-of-sample testing.
