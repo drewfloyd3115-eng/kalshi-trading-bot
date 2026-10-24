@@ -91,7 +91,8 @@ class TonightCFBTests(unittest.TestCase):
         df.attrs["indicative_market"]=pd.DataFrame()
         board=tonight_slate(source_games(),df,now=NOW)
         self.assertTrue(board.empty)  # one real historical game fails minimum history
-        self.assertEqual(list(board.columns)[-1],"decision")
+        self.assertIn("decision",board.columns)
+        self.assertIn("sim_home_win_pct",board.columns)
 
     def test_timestamp_must_be_aware(self):
         with self.assertRaisesRegex(ValueError,"timezone-aware"):
