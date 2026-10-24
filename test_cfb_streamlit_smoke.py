@@ -8,4 +8,4 @@ class CFBStreamlitSmoke(unittest.TestCase):
         from streamlit.testing.v1 import AppTest
         at=AppTest.from_file('cfb_model_app.py',default_timeout=20).run()
         self.assertFalse(at.exception,str(at.exception))
-        self.assertTrue(any('No games loaded' in x.message for x in at.info))
+        self.assertTrue(any('No games loaded' in str(x.value) for x in at.info))
