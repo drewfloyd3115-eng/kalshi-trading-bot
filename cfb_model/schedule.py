@@ -18,6 +18,51 @@ ESPN_SCOREBOARD = (
 )
 
 
+def indicative_espn_odds(event: dict, competition: dict, observed_at) -> dict | None:
+    """Best-effort scoreboard odds, never an executable offer or Kalshi price.
+
+    Home handicap's sign requires explicit favorite flags on the HOME and AWAY
+    competition blocks. Without unambiguous flags, spread is withheld rather
+    than inferred from ESPN's undocumented 'spread' convention.
+    """
+    entries = competition.get("odds") or []
+    if not isinstance(entries, list):
+        return None
+    for odds in entries:
+        if not isinstance(odds, dict):
+            continue
+        def valid(value):
+            try:
+                x = float(value)
+                return x if pd.notna(x) and -1000 < x < 1000 else None
+            except (TypeError, ValueError, OverflowError):
+                return None
+        total = valid(odds.get("overUnder"))
+        spread = valid(odds.get("spread"))
+        handicap = None
+        if spread is not None:
+            home_odds = odds.get("homeTeamOdds") or {}
+            away_odds = odds.get("awayTeamOdds") or {}
+            home_favorite = home_odds.get("favorite")
+            away_favorite = away_odds.get("favorite")
+            if isinstance(home_favorite, bool) and isinstance(away_favorite, bool) and home_favorite != away_favorite:
+                handicap = -abs(spread) if home_favorite else abs(spread)
+            elif spread == 0:
+                handicap = 0.0
+        if handicap is None and total is None:
+            continue
+        provider = odds.get("provider") or {}
+        name = provider.get("name") if isinstance(provider, dict) else None
+        return {
+            "game_id": "espn-" + str(event["id"]),
+            "market_home_handicap": handicap, "market_total": total,
+            "market_provider": str(name).strip() if name else "Unspecified ESPN provider",
+            "market_observed_utc": pd.Timestamp(observed_at).isoformat(),
+            "market_verification": "UNVERIFIED ESPN SCOREBOARD SNAPSHOT"
+        }
+    return None
+
+
 def parse_schedule_events(payload: dict, id_to_name: dict, now=None) -> pd.DataFrame:
     """Convert scheduled ESPN FBS events to scoreless fixtures.
 
@@ -35,7 +80,7 @@ def parse_schedule_events(payload: dict, id_to_name: dict, now=None) -> pd.DataF
         raise ValueError("Missing verified ESPN team-ID mapping: reload public FBS game results")
     if not payload["events"]:
         raise ValueError("ESPN returned no schedule events; verify endpoint and date range")
-    rows, seen = [], set()
+    rows, seen, market_rows = [], set(), []
     stats = {"received": len(payload["events"]), "started": 0,
              "unmapped": 0, "invalid": 0}
     for e in payload["events"]:
@@ -74,6 +119,9 @@ def parse_schedule_events(payload: dict, id_to_name: dict, now=None) -> pd.DataF
             stats["invalid"] += 1
             continue
         seen.add(eid)
+        indicative = indicative_espn_odds(e, comp, now)
+        if indicative:
+            market_rows.append(indicative)
         rows.append({
             "game_id": f"espn-{eid}", "season": int(timestamp.year),
             "week": int(((e.get("week") or {}).get("number")) or 0),
@@ -90,9 +138,11 @@ def parse_schedule_events(payload: dict, id_to_name: dict, now=None) -> pd.DataF
             "Refresh historical public scores or try another upcoming week."
         )
     df = normalize_games(pd.DataFrame(rows, columns=COLUMNS))
+    stats["priced"] = len(market_rows)
     df.attrs.update({
         "source": "ESPN public scoreboard (unofficial, read-only)",
-        "fetched_utc": now.isoformat(), "stats": stats
+        "fetched_utc": now.isoformat(), "stats": stats,
+        "indicative_market": pd.DataFrame(market_rows)
     })
     return df
 

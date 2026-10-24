@@ -86,3 +86,13 @@ The public results source also lacks 2022. Its missing season is not filled or i
 ### ESPN schedule compatibility (October 24, 2026)
 
 ESPN now responds HTTP 400 when the scoreboard receives date ranges such as `dates=20261024-20261101`. The upcoming eight-day loader uses one bounded **single-day** request per UTC calendar date, deduplicates by exact event ID, and then filters to future pregame events inside the requested rolling horizon. Any failed or malformed daily request blocks the entire schedule rather than showing a partial slate as complete. No API key or sportsbook credits are needed. This is an unofficial ESPN endpoint, so responses can change.
+
+## Indicative model vs sportsbook scoreboard (read-only, optional)
+
+After loading the public score history and the upcoming ESPN scoreboard, **Model versus market — indicative research** displays point-based differences when that scoreboard happens to include a sportsbook spread or total with enough metadata to identify the correct home/away side. A spread difference is calculated as `projected_home_margin + market_home_handicap`; total difference is `projected_total - market_total`.
+
+- The ESPN feed is undocumented and may omit odds. Missing book lines are shown as unavailable, not generated from the model.
+- Bookmaker provider and snapshot time are preserved; snapshots older than 30 minutes show `STALE — NO SIGNAL`.
+- If favorite/home direction is ambiguous, the market spread is withheld rather than applying a potentially reversed line.
+- No transaction price, sportsbook vig, fee-adjusted edge, liquidity, odds or Kalshi settlement eligibility is inferred from an ESPN spread or total.
+- Every mismatch is a **research lead only**. Validate injuries, lines, game clocks, model calibration, and contract rules before any real-money use. All live order placement remains disabled.
