@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 
 from .core import walk_forward
-from .sim_preview import simulate_preview, research_confidence
+from .sim_preview import simulate_preview, model_evidence_quality
 from .data import COLUMNS, normalize_games
 from ui_timezone import CENTRAL
 
@@ -24,7 +24,7 @@ BOARD_COLUMNS = [
     "margin_sigma", "total_sigma", "research_confidence", "confidence_color",
     "confidence_reason", "simulations", "sim_home_win_pct","sim_away_win_pct",
     "sim_home_cover_pct", "sim_over_pct", "sim_margin_p10", "sim_margin_p90",
-    "sim_total_p10", "sim_total_p90"
+    "sim_total_p10", "sim_total_p90", "market_source_label"
 ]
 
 
@@ -85,15 +85,22 @@ def tonight_slate(games: pd.DataFrame, schedule: pd.DataFrame, now=None,
         return pd.DataFrame(columns=BOARD_COLUMNS)
     # Optional market metadata is a RETRIEVAL-TIME UNVERIFIED ESPN snapshot;
     # it is never proof that an offer was executable or accurately timestamped.
-    market = fresh_market if isinstance(fresh_market, pd.DataFrame) and not fresh_market.empty else schedule.attrs.get("indicative_market")
+    # Keep the ESPN reference available per unmatched game rather than
+    # dropping all ESPN data once any independent bookmaker game is matched.
     lookup = {}
-    if isinstance(market, pd.DataFrame) and not market.empty:
-        required = {"game_id", "market_home_handicap", "market_total", "market_provider"}
+    for market,source in (
+        (schedule.attrs.get("indicative_market"),"ESPN_REFERENCE"),
+        (fresh_market,"INDEPENDENT_BOOK")
+    ):
+        if not isinstance(market,pd.DataFrame) or market.empty:
+            continue
+        required={"game_id","market_home_handicap","market_total","market_provider"}
         if not required.issubset(market.columns):
-            raise ValueError("Malformed market snapshot; no safe comparison")
+            raise ValueError(f"Malformed {source} market data; refusing ambiguous comparisons")
         if market.game_id.astype(str).duplicated().any():
-            raise ValueError("Duplicate market event IDs")
-        lookup = market.set_index("game_id").to_dict(orient="index")
+            raise ValueError(f"Duplicate {source} market event IDs")
+        # Independent book quotes supersede ESPN for only those game IDs.
+        lookup.update(market.set_index("game_id").to_dict(orient="index"))
     ids_by_event = schedule.attrs.get("espn_event_team_ids",{})
     rows = []
     for _, p in predictions.iterrows():
@@ -102,14 +109,16 @@ def tonight_slate(games: pd.DataFrame, schedule: pd.DataFrame, now=None,
         total = pd.to_numeric(m.get("market_total"), errors="coerce")
         model_margin = float(p.projected_home_margin)
         model_total = float(p.projected_total)
-        origin = str(m.get("market_verification", "UNVERIFIED ESPN SCOREBOARD SNAPSHOT"))
+        origin = str(m.get("market_verification","NO MARKET DATA"))
         is_fresh = origin == "ODDS_API_FRESH"
-        count = int(m.get("market_book_count",0) or 0) if is_fresh else 0
-        confidence, color, reason = research_confidence(
-            int(p.home_sample), int(p.away_sample),
-            home_handicap=spread if pd.notna(spread) and is_fresh else None,
-            disagreement=model_margin+float(spread) if pd.notna(spread) and is_fresh else None,
-            market_source=origin,book_count=count)
+        count = int(m.get("market_book_count",0) or 0) if origin.startswith("ODDS_API_") else 0
+        confidence, color, reason = model_evidence_quality(
+            int(p.home_sample),int(p.away_sample),
+            float(p.margin_sigma),float(p.total_sigma),
+            reference_home_handicap=spread if pd.notna(spread) else None)
+        source_label = ("INDEPENDENT BOOK" if origin.startswith("ODDS_API_")
+                        else "ESPN REFERENCE" if origin=="UNVERIFIED ESPN SCOREBOARD SNAPSHOT"
+                        else "NO MARKET DATA")
         sim = simulate_preview(
             str(p.game_id),model_margin,model_total,
             float(p.margin_sigma),float(p.total_sigma),
@@ -122,8 +131,8 @@ def tonight_slate(games: pd.DataFrame, schedule: pd.DataFrame, now=None,
         if pd.notna(spread) and abs(float(spread)) >= 21:
             signs.append("LARGE FAVORITE: 2025 MODEL WEAKNESS")
         if not is_fresh:
-            signs.append("VEGAS LINE NOT INDEPENDENTLY VERIFIED")
-        if pd.notna(spread) and not is_fresh:
+            signs.append("NOT A CURRENT EXECUTABLE SPORTSBOOK QUOTE")
+        if pd.notna(spread) and origin=="UNVERIFIED ESPN SCOREBOARD SNAPSHOT":
             signs.append("ESPN INDICATIVE LINE ONLY")
         if pd.isna(spread):
             signs.append("NO SPREAD LINE")
@@ -142,7 +151,8 @@ def tonight_slate(games: pd.DataFrame, schedule: pd.DataFrame, now=None,
             "spread_disagreement_points": round(model_margin+float(spread),1) if pd.notna(spread) else None,
             "total_disagreement_points": round(model_total-float(total),1) if pd.notna(total) else None,
             "market_provider": str(m.get("market_provider","NO SOURCE")),
-            "market_verification": origin if m else "NO DATA",
+            "market_verification": origin,
+            "market_source_label": source_label,
             "market_book_count": count,
             "market_oldest_quote_minutes": m.get("market_oldest_quote_minutes"),
             "caution": " · ".join(signs),
