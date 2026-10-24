@@ -7,6 +7,8 @@ import streamlit as st
 from .core import walk_forward, Forecast
 from .data import read_games_csv, fetch_years, fetch_public_years, COLUMNS
 from .backtest import score_predictions
+from .historical_market import (calibration_table, benchmark_predictions,
+                                fetch_cfbd_closing_lines, normalize_closing_lines, LINE_COLUMNS)
 from .value import evaluate, from_orderbook, taker_fee
 from ui_timezone import format_central, display_central_columns
 
@@ -119,6 +121,69 @@ def render_model_ui():
         test_year=st.selectbox("Holdout season",valid_seasons,index=(valid_seasons.index(2025) if 2025 in valid_seasons else len(valid_seasons)-1))
         st.json(score_predictions(predictions,test_year))
     st.caption("The model uses only final results, not EPA, injuries or independently verified sportsbook closing lines yet. Predictive accuracy is not proof of betting profitability.")
+    if valid_seasons:
+        with st.expander("Probability calibration — model vs actual outcomes",expanded=False):
+            st.caption("Historical frequency by predicted confidence band. This is not an ROI calculation or proof of a profitable edge.")
+            calibrated=calibration_table(predictions,int(test_year))
+            if calibrated.empty:
+                st.info("Insufficient eligible holdout games for calibration.")
+            else:
+                st.dataframe(calibrated,hide_index=True,use_container_width=True)
+                st.download_button("Download calibration CSV",calibrated.to_csv(index=False).encode("utf-8"),
+                                   file_name=f"cfb_calibration_{test_year}.csv",mime="text/csv")
+        st.subheader("Historical sportsbook benchmark")
+        st.caption("Paired spread and total MAE against actual closing lines. Only matching game IDs and exact home/away teams are accepted. No quote timestamps or executable prices = NO historical EV or P&L evidence.")
+        market_source=st.radio("Historical sportsbook data",["Upload closing-lines CSV (no key)",
+            "Fetch CFBD historical lines (requires API key)"],key="cfb_line_source")
+        selected_provider=st.selectbox("Provider",["consensus","DraftKings","Caesars","Bovada","teamrankings"],key="cfb_line_provider")
+        if market_source.startswith("Upload"):
+            template=pd.DataFrame(columns=LINE_COLUMNS).to_csv(index=False)
+            st.download_button("Download historical-lines CSV template",template,
+                               file_name="cfb_historical_closing_lines_template.csv",mime="text/csv")
+            lines_file=st.file_uploader("Historical closing lines CSV (one selected provider per game)",
+                                        type=["csv"],key="cfb_line_upload")
+            if lines_file is not None and st.button("Validate uploaded closing lines",key="cfb_lines_upload_go"):
+                try:
+                    loaded=normalize_closing_lines(pd.read_csv(lines_file))
+                    st.session_state.cfb_closing_lines=loaded
+                    st.session_state.cfb_line_year=int(test_year)
+                    st.success(f"Validated {len(loaded)} closing-line records for comparison; game years checked during exact-ID match.")
+                except Exception as exc:
+                    st.session_state.pop("cfb_closing_lines",None)
+                    st.error(f"Closing-lines CSV rejected: {exc}")
+        else:
+            if not _key():
+                st.info("Add CFBD_API_KEY privately in Streamlit Secrets to import official historical closing lines. Do not publish the key in code or screenshots.")
+            if st.button(f"Fetch {int(test_year)} {selected_provider} closing lines (manual)",
+                         key="cfb_market_fetch",disabled=not bool(_key())):
+                try:
+                    with st.spinner("Fetching historical bookmaker lines from CollegeFootballData..."):
+                        loaded=fetch_cfbd_closing_lines(int(test_year),_key(),selected_provider)
+                    st.session_state.cfb_closing_lines=loaded
+                    st.session_state.cfb_line_year=int(test_year)
+                    st.success(f"Loaded {len(loaded)} {selected_provider} historical game-line records.")
+                except Exception as exc:
+                    st.session_state.pop("cfb_closing_lines",None)
+                    st.error(f"Historical lines fetch failed: {exc}")
+        cached_lines=st.session_state.get("cfb_closing_lines")
+        cached_year=st.session_state.get("cfb_line_year")
+        if isinstance(cached_lines,pd.DataFrame) and not cached_lines.empty:
+            if int(cached_year)!=int(test_year):
+                st.warning("Select the matching holdout season and reload its closing lines. Previous season lines are not reused.")
+            else:
+                try:
+                    market_report,paired=benchmark_predictions(predictions,cached_lines,int(test_year))
+                    st.json(market_report)
+                    st.caption("Positive 'market_advantage_points' means MODEL has lower average absolute error on MATCHED games. Negative means sportsbook line predicts better. This is NOT expected value.")
+                    st.dataframe(display_central_columns(paired.head(150)),
+                                 hide_index=True,use_container_width=True)
+                    st.download_button("Download paired market benchmark CSV (UTC)",
+                                       paired.to_csv(index=False).encode("utf-8"),
+                                       file_name=f"cfb_market_benchmark_{test_year}.csv",mime="text/csv")
+                except Exception as exc:
+                    st.warning(f"Historical market comparison not available: {exc}")
+        else:
+            st.info("No real historical sportsbook lines loaded. Holdout scoring remains available, but we cannot claim to beat the market.")
     st.subheader("Upcoming matchups")
     now=pd.Timestamp.now(tz="UTC")
     upcoming=predictions.loc[(~predictions.completed)&(predictions.kickoff_utc>now)&(predictions.eligible_history)].copy()

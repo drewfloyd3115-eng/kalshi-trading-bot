@@ -101,3 +101,33 @@ After loading the public score history and the upcoming ESPN scoreboard, **Model
 ## Display time zone
 
 The CFB Model's kickoff selector, upcoming slate, market comparison and snapshot labels use Central Time (`America/Chicago`; CDT or CST as appropriate). The app does **not** change game kickoff instants, eligibility checks or source timestamps. Exported history/prediction CSVs deliberately retain UTC for reproducible replay.
+
+## Phase 2: probability calibration and historical sportsbook benchmark
+
+The CFB Model now provides two audited, **paper-only** views for the selected holdout season:
+
+**Probability calibration:** The 50–60%, 60–70%, 70–80%, 80–90%, and 90–100% forecast-confidence bands show the observed share of correctly picked outright winners. Do not treat these bins as 2025 betting profitability or as proof of calibrated spreads and totals.
+
+**Historical sportsbook benchmark:** Obtain *real* CollegeFootballData historical /lines records using a private `CFBD_API_KEY` stored in Streamlit Secrets, or upload a verified CSV with these column headers:
+
+`game_id,home_team,away_team,provider,home_handicap,total`
+
+- `home_handicap` is the **signed HOME team's handicap**, e.g. Illinois +9.5 against Oregon -9.5 means `home_handicap = 9.5`.
+- `total` is the reported betting game-total threshold (e.g. 49.5).
+- At least one of `home_handicap` and `total` must exist for a game, and every `game_id` must be unique with one selected provider.
+- The importer supports CFBD camelCase and snake_case JSON; a formatted spread is required to resolve home-vs-away sign. Ambiguous spreads are withheld instead of guessed.
+- The 2025 lines **must match 2025 completed model games by exact game ID and exact team names**. If those data sources disagree, the benchmark blocks the mismatched records.
+- The UI shows coverage, paired model-versus-book MAE and a naive game-resampling 95% interval, **not a verified prediction-market EV, ROI, CLV or historical win rate at actionable prices**. Some closing-line records have no captured-at timestamp or fill-depth data. This prevents a valid Kalshi P&L backtest.
+- The public FBS game-score feed still has no 2022 season. A sourced, complete history is required before claiming validated performance.
+- This feature **does not use the market as a model training input** and does not alter predictions, scanning, order placement or risk constraints. Market comparisons are held out from training.
+
+On a development machine you can run:
+
+```bash
+python -m cfb_model.cli backtest --games data/fbs_public_games.csv --holdout-year 2025 --out data/pregame_predictions.csv
+python -m cfb_model.cli benchmark --predictions data/pregame_predictions.csv --holdout-year 2025 --lines data/verified_closing_lines.csv --out data/cfb_paired_closing_line_benchmark.csv
+# Or: CFBD_API_KEY set securely in the environment
+python -m cfb_model.cli benchmark --predictions data/pregame_predictions.csv --holdout-year 2025 --fetch-cfbd --provider consensus
+```
+
+If historical lines aren't accessible, the honest result is **benchmark not yet measured**, not a made-up result.

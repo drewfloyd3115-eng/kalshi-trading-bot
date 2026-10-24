@@ -61,3 +61,10 @@ In the **CFB Model** tab load the free public FBS scores, then select **Load upc
 ## Display timezone
 
 **All human-readable app dates/times default to Central Time (America/Chicago).** Daylight-saving changes are automatic: CDT (UTC−5) during daylight time and CST (UTC−6) during standard time. This applies to CFB kickoff selectors/tables, sportsbook kickoff fields, market snapshot captions and portfolio history. The raw downloaded CSV audit columns and internal kickoff/fee/quote-freshness validation remain timestamped in UTC; those source fields are never rewritten just to change the display timezone. Missing or timezone-naive timestamps are shown as unverified rather than assumed Central.
+
+
+## Historical CFB model vs sportsbook (Phase 2)
+
+The **CFB Model** tab now includes an optional **Probability calibration** view and a **Historical sportsbook benchmark** view. With real historical CFBD /lines data it compares model point-spread/total mean absolute errors against same-game sportsbook closing-line errors using exact game IDs and team names. It shows matching sample counts, coverage and uncertainty; does **not** calculate historical wager profits or treat untimestamped closing lines as executable entry prices.
+
+Use the real **closing-lines CSV upload** route without a key or configure `CFBD_API_KEY` *privately* in Streamlit Cloud Secrets, then manually fetch the selected season's historical lines (2025 by default). The app never fetches historical bookmaker data automatically or uses it to train its model. See [CFB_PREDICTION_LAB.md](CFB_PREDICTION_LAB.md) for the schema and offline CLI. Missing or mismatched lines remain unavailable rather than fabricated.

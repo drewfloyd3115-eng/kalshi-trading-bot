@@ -7,6 +7,10 @@ import pandas as pd
 from .data import fetch_years, fetch_public_years, read_games_csv
 from .core import walk_forward
 from .backtest import score_predictions, evaluate_quote_history
+from .historical_market import (
+    calibration_table, benchmark_predictions, normalize_closing_lines,
+    fetch_cfbd_closing_lines
+)
 
 
 def main(argv=None):
@@ -25,6 +29,13 @@ def main(argv=None):
     run.add_argument("--holdout-year",type=int,default=2025)
     run.add_argument("--out",default="data/pregame_predictions.csv")
     run.add_argument("--quotes",help="OPTIONAL actual timestamped historical market quotes")
+    bench=subs.add_parser("benchmark",help="Market paired-MAE benchmark; never computes betting ROI")
+    bench.add_argument("--predictions",required=True,help="Previously exported timestamped pregame forecasts CSV")
+    bench.add_argument("--lines",help="Real closing lines CSV with exact game IDs (optional with --fetch-cfbd)")
+    bench.add_argument("--fetch-cfbd",action="store_true",help="One real CFBD request using CFBD_API_KEY")
+    bench.add_argument("--provider",default="consensus",choices=["consensus","DraftKings","Caesars","Bovada","teamrankings"])
+    bench.add_argument("--holdout-year",type=int,default=2025)
+    bench.add_argument("--out",default="data/cfb_paired_closing_line_benchmark.csv")
     a=cli.parse_args(argv)
     if a.command=="sync":
         token=os.getenv("CFBD_API_KEY","")
@@ -37,6 +48,22 @@ def main(argv=None):
         Path(a.out).parent.mkdir(parents=True,exist_ok=True)
         data.to_csv(a.out,index=False)
         print(f"Saved {len(data)} real public FBS fixtures to {a.out} (source: jackwarfield/cfb_rankings)")
+    elif a.command=="benchmark":
+        if bool(a.lines) == bool(a.fetch_cfbd):
+            cli.error("Provide exactly one of --lines CSV or --fetch-cfbd")
+        forecasts=pd.read_csv(a.predictions)
+        if a.fetch_cfbd:
+            lines=fetch_cfbd_closing_lines(a.holdout_year,os.getenv("CFBD_API_KEY",""),a.provider)
+        else:
+            lines=normalize_closing_lines(pd.read_csv(a.lines))
+        report,matched=benchmark_predictions(forecasts,lines,a.holdout_year)
+        destination=Path(a.out)
+        destination.parent.mkdir(parents=True,exist_ok=True)
+        matched.to_csv(destination,index=False)
+        cal=calibration_table(forecasts,a.holdout_year)
+        cal.to_csv(destination.with_name("cfb_probability_calibration.csv"),index=False)
+        print(json.dumps(report,indent=2))
+        print(f"Saved {len(matched)} paired records to {destination}; market lines are NOT historical executable prices.")
     elif a.command=="backtest":
         games=read_games_csv(a.games)
         pre,model=walk_forward(games)
