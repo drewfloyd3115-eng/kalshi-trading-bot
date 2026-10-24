@@ -58,6 +58,7 @@ st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="cent
 add_styles()
 header()
 st.caption("Sports UI preview 2.2 · NO-side bid validation and fee metadata · PAPER ONLY · Live trading disabled.")
+st.caption("Displayed dates and times: Central (CDT/CST, America/Chicago). Exported raw CSV timestamps remain UTC.")
 
 # Streamlit's native pills wrap on mobile; st.columns always stack at phone width.
 # One single-select widget controls every view without CSS-dependent navigation.
