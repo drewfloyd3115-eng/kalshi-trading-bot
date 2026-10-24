@@ -104,3 +104,16 @@ The initial 15-minute quote-age gate made available sportsbook lines appear as `
 4. **VEGAS SPREAD · UNAVAILABLE:** no validated source; a per-game diagnostic distinguishes unmatched team names, missing odds event, mismatched kickoff, absent spread market, absent timestamp, stale quote or invalid side/sign. A zero-event response shows zero, not a fictitious line.
 
 The app does **not** make additional paid API calls for diagnostics. A cached quote becomes labeled an older reference once the 15-minute cutoff is exceeded. Preview simulated covers only use validated current lines; older/ESPN references are display-only. All betting statuses remain **PASS**, as historical evidence does not establish a profitable edge. `ODDS_API_KEY` remains in Streamlit Secrets.
+
+
+### Independent market-source verification versus model evidence (Oct 24)
+
+Matchup cards deliberately separate **market source** from **model evidence**:
+
+- **Market source:** `INDEPENDENT BOOK` when an exact matching The Odds API quote exists (with current vs older age checks); `ESPN REFERENCE` when the ESPN scoreboard provides an indicative reference only; otherwise `NO MARKET DATA`. The data-source state does NOT set the model-evidence rating.
+- **Model evidence:** `PRELIMINARY` amber (historical game samples and residual dispersions satisfy basic checks), `LOW` red (insufficient team sample, high historical margin dispersion, or 21+ point market favorite), and `INSUFFICIENT` neutral (invalid residual uncertainty). No high/green/profitable label is justified: on 2025 matched games the baseline trailed sportsbook spread and total MAE.
+- **Per-game fallback:** Independent sportsbook lines replace ESPN references only for exact matched IDs. A successful match for one game must not cause unmatched games to lose their reference lines.
+- **Simulations:** Illustrative 20,000 Gaussian residual draws, **not empirically calibrated betting confidence**. Every card continues to show **PASS** until a separately validated market price/fee/settlement and genuinely positive EV exist.
+- **Known omitted factors:** verified quarterback injuries/status, weather, EPA, play-by-play efficiency, and late player news are not yet integrated.
+
+The screen recording showing all cards as `UNVERIFIED` reflected a presentation coupling error, not proof that all historical model inputs or market events were invalid. Current quotes still require source confirmation, market-time validation and matching. This fix does not add paid API calls or authorize wagers.

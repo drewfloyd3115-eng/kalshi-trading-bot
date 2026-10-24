@@ -64,7 +64,7 @@ def _colored_reliability(label: str, color: str, reason: str):
     st.markdown(
         f'<div style="border-radius:8px;padding:8px 10px;background:{bg};'
         f'color:{fg};font-size:0.88rem">'
-        f'<strong>Model reliability: {escape(label)}</strong>'
+        f'<strong>Model evidence: {escape(label)}</strong>'
         f'<div style="font-size:0.75rem;margin-top:3px">{escape(reason)}</div>'
         '</div>',unsafe_allow_html=True)
 
@@ -72,7 +72,7 @@ def _colored_reliability(label: str, color: str, reason: str):
 def render_tonight_ui():
     st.title("Tonight’s CFB")
     st.caption("Vegas vs. model · Simulations · Central Time · Research only")
-    st.info("Our 2025 score-only model trailed actual sportsbook lines. Reliability colors describe available evidence, NOT the probability of a profitable bet. Injuries, starting QBs, weather and advanced efficiency are not yet modeled.")
+    st.info("Market source and model evidence are two SEPARATE assessments. The 2025 score-only model trailed sportsbooks; none of these ratings verifies profitable odds. Injuries, starting QBs, weather and advanced efficiency are not yet modeled.")
     now=pd.Timestamp.now(tz="UTC")
     day=now.tz_convert(CENTRAL).date().isoformat()
     st.caption(f"Today: {now.tz_convert(CENTRAL).strftime('%a, %b %d')} · Only unstarted 5 PM+ Central kickoffs.")
@@ -141,8 +141,9 @@ def render_tonight_ui():
         return
     a,b=st.columns(2)
     a.metric("Remaining games",len(active))
-    b.metric("Fresh Vegas matches",sum(
+    b.metric("Current book lines",sum(
         str(r.market_verification)=="ODDS_API_FRESH" and
+        pd.notna(r.market_home_handicap) and
         age+float(r.market_oldest_quote_minutes or 0)<=15
         for _,r in active.iterrows()))
     st.caption(f"Refreshed {format_central(fetched)} · {age:.0f} minutes ago"
@@ -156,6 +157,18 @@ def render_tonight_ui():
                    " · Unmatched games explain their exclusions below. No further API call is used for diagnostics.")
     if st.session_state.get("cfb_tonight_missing_years"):
         st.caption("Historical coverage incomplete: "+", ".join(map(str,st.session_state.cfb_tonight_missing_years)))
+    current=sum(str(r.market_verification)=="ODDS_API_FRESH" and
+                pd.notna(r.market_home_handicap) and
+                age+float(r.market_oldest_quote_minutes or 0)<=15 for _,r in active.iterrows())
+    reference=sum(str(r.market_source_label)=="ESPN REFERENCE" and
+                  pd.notna(r.market_home_handicap) for _,r in active.iterrows())
+    older=sum(str(r.market_source_label)=="INDEPENDENT BOOK" and
+              not (str(r.market_verification)=="ODDS_API_FRESH" and
+                   age+float(r.market_oldest_quote_minutes or 0)<=15) and
+              pd.notna(r.market_home_handicap) for _,r in active.iterrows())
+    st.caption(f"Market coverage: {current} current sportsbook · {older} older sportsbook · "
+               f"{reference} ESPN reference · {len(active)-current-older-reference} without a line. "
+               "Source status does not determine model evidence quality.")
     st.markdown("### Matchups")
     for _,r in active.iterrows():
         # Each card is intentionally readable on a narrow iPhone screen.
@@ -218,8 +231,9 @@ def render_tonight_ui():
             confidence=str(r.research_confidence)
             color=str(r.confidence_color)
             reason=str(r.confidence_reason)
-            if not is_fresh:
-                confidence,color,reason="UNVERIFIED","neutral","Fresh Vegas spread unavailable; injury/weather/advanced stats not in model"
+            st.caption(f"Market source: {r.market_source_label} · "
+                       +("fresh sportsbook quote" if is_fresh else
+                         "not verified as a live executable quote"))
             _colored_reliability(confidence,color,reason)
             st.caption(f"SIMULATIONS · {int(r.simulations):,} draws · Illustrative Gaussian model")
             st.progress(float(r.sim_home_win_pct)/100,
