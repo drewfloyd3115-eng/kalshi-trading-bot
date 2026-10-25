@@ -64,8 +64,12 @@ header()
 # This never fetches odds or places orders.
 if st.session_state.get("sports_nav") not in PAGES:
     st.session_state["sports_nav"] = "Home"
+NAV_LABELS = {"Home":"Overview","Tonight CFB":"Games","Opportunities":"Markets",
+              "Market Detail":"Market Detail","Portfolio":"Portfolio",
+              "CFB Model":"Model Lab","Research":"Advanced"}
 page = st.pills("Navigate", PAGES, selection_mode="single", default="Home",
-                key="sports_nav", label_visibility="collapsed") or "Home"
+                key="sports_nav", label_visibility="collapsed",
+                format_func=lambda selected:NAV_LABELS.get(selected,selected)) or "Home"
 
 if "queue" not in st.session_state:
     st.session_state.queue = []
