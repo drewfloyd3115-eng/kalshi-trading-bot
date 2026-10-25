@@ -240,6 +240,109 @@ div.stButton > button[kind="primary"]:hover {background:#086bd2; color:white;}
     .kl-opp-figure {padding:8px 6px;}
     .kl-opp-figure strong {font-size:.96rem;}
 }
+
+/* Trade Lab 3.0 — restrained mobile dashboard; keeps old research components. */
+.stApp {
+ background: #07101b !important;
+ color: #f3f7fd;
+}
+.block-container {max-width:860px; padding-top:.55rem !important; padding-bottom:4rem;}
+[data-testid="stVerticalBlock"] {gap:.65rem;}
+div[data-testid="stMetric"] {
+ background:#111f30; border:1px solid #26394e;
+ box-shadow:none; min-height:unset;
+}
+h1,h2,h3 {line-height:1.2;}
+.tl-brand {display:flex;align-items:center;justify-content:space-between;
+ gap:10px;padding:7px 1px 11px;border-bottom:1px solid #1e3042;margin-bottom:5px;}
+.tl-brand-name {font-size:1.16rem;font-weight:850;letter-spacing:-.03em;color:#f4f8fc;}
+.tl-brand-name span {color:#7da9e9;}
+.tl-brand-mode {font-size:.62rem;letter-spacing:.07em;color:#a5b7cb;
+ border:1px solid #324459;border-radius:99px;padding:5px 9px;white-space:nowrap;}
+.tl-page-kicker,.tl-section-label {font-size:.70rem;font-weight:800;
+ color:#a6bcd5;letter-spacing:.12em;margin:13px 0 5px;}
+.tl-page-kicker span {color:#60d1b6;}
+.tl-page-title {font-size:1.65rem;font-weight:850;letter-spacing:-.04em;
+ line-height:1.12;margin:4px 0 4px;color:#f6f8fc;}
+.tl-summary {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:8px;margin-top:14px;}
+.tl-summary>div {background:#101f2e;border:1px solid #26374c;border-radius:11px;
+ padding:11px 10px;min-width:0;}
+.tl-summary small {display:block;color:#9ab0c8;font-size:.58rem;
+ letter-spacing:.05em;font-weight:750;min-height:26px;}
+.tl-summary strong {font-size:1.48rem;font-weight:850;line-height:1.15;color:#f3f8fc;}
+.tl-refresh-note {font-size:.68rem;color:#849db8;margin:9px 0 15px;}
+.tl-card {border:1px solid #2a4056;border-radius:15px;
+ background:linear-gradient(140deg,#101f2e,#0c1826);padding:14px;
+ margin:12px 0 3px;overflow:hidden;}
+.tl-card-kickoff {display:flex;align-items:center;justify-content:space-between;
+ gap:6px;color:#adbfce;font-size:.72rem;}
+.tl-teams {display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr);
+ gap:5px;align-items:center;margin:12px 0 14px;}
+.tl-team {display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0;}
+.tl-logo {width:42px;height:42px;object-fit:contain;margin-bottom:5px;}
+.tl-logo-placeholder {font-size:30px;height:42px;}
+.tl-team strong {font-size:.91rem;line-height:1.18;overflow-wrap:anywhere;
+ color:#f5f8ff;font-weight:750;}
+.tl-team small {font-size:.57rem;color:#7896ae;letter-spacing:.1em;margin-top:4px;}
+.tl-vs {text-align:center;color:#6f8297;font-size:.8rem;}
+.tl-linegrid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.tl-line {background:#081421;border:1px solid #243d55;border-radius:10px;padding:10px;min-width:0;}
+.tl-line span {display:block;color:#95abc2;letter-spacing:.06em;font-size:.62rem;font-weight:750;}
+.tl-line strong {font-size:1.03rem;color:#fff;line-height:1.2;display:block;
+ margin:6px 0 4px;overflow-wrap:anywhere;}
+.tl-line small {color:#7d99b0;font-size:.66rem;line-height:1.25;display:block;}
+.tl-gap {display:flex;justify-content:space-between;gap:8px;align-items:center;
+ padding:10px 1px;border-bottom:1px solid #20374a;flex-wrap:wrap;}
+.tl-gap strong {font-size:.87rem;color:#f6cb8e;}
+.tl-gap span {font-size:.66rem;color:#99b0c8;}
+.tl-predicted {display:flex;flex-wrap:wrap;gap:5px 9px;
+ padding:10px 0;color:#9bb5c9;font-size:.73rem;}
+.tl-predicted strong {color:#f5f8fc;}
+.tl-predicted span {margin-left:auto;}
+.tl-sim-head,.tl-sim-sides {display:flex;justify-content:space-between;
+ gap:7px;align-items:center;}
+.tl-sim-head span {color:#9bb5c9;font-size:.62rem;letter-spacing:.07em;font-weight:760;}
+.tl-sim-head small {font-size:.62rem;color:#6f91ad;}
+.tl-sim-sides strong {font-size:.77rem;color:#dcebf7;margin:7px 0 5px;}
+.tl-prob-track {height:8px;background:#314963;border-radius:10px;overflow:hidden;}
+.tl-prob-away {height:100%;border-radius:10px;background:#7faef0;}
+.tl-chip {display:inline-block;border-radius:6px;font-size:.62rem;line-height:1.2;
+ padding:4px 6px;border:1px solid #405570;color:#c3d5e4;white-space:nowrap;}
+.source-current {color:#9be3cf;border-color:#27685d;background:#10372f;}
+.source-older {color:#f5d494;border-color:#735a2c;background:#322711;}
+.source-espn {color:#b2c8ec;border-color:#3f5680;background:#1b2c47;}
+.source-missing {color:#bbc5d2;border-color:#435166;background:#233142;}
+.model-amber {color:#f3d38e;border-color:#6b572d;background:#372a14;}
+.model-red {color:#ffc0ba;border-color:#69423f;background:#3c2226;}
+.model-neutral {color:#c4d0dc;border-color:#4a5764;background:#25313e;}
+.tl-card-bottom {display:flex;justify-content:space-between;flex-wrap:wrap;
+ gap:8px;align-items:center;margin-top:13px;}
+.tl-research-status {font-size:.64rem;color:#8ba9bb;}
+.tl-empty {border:1px dashed #34526f;background:#0e2031;border-radius:14px;
+ padding:20px 16px;margin:14px 0;}
+.tl-empty strong {font-size:1.1rem;color:#f4f7fb;}
+.tl-empty p {color:#afc3d5;font-size:.83rem;line-height:1.5;margin:6px 0;}
+.tl-action-card {background:#112235;border:1px solid #29425c;border-radius:14px;
+ padding:15px;margin:7px 0;min-height:84px;}
+.tl-action-card strong {display:block;color:#f5f9fd;font-size:1.05rem;}
+.tl-action-card p {color:#aac1d5;font-size:.78rem;margin:7px 0 0;line-height:1.4;}
+.tl-mini-label {font-size:.63rem;color:#95b2c9;text-transform:uppercase;letter-spacing:.1em;font-weight:750;}
+/* Compact navigation without seven oversized pill rows. */
+.st-key-sports_nav [data-testid="stButtonGroup"] {overflow-x:auto;}
+.st-key-sports_nav button {white-space:nowrap;font-size:.78rem;padding:.4rem .64rem;}
+@media(max-width:650px) {
+ .block-container {padding:.55rem .78rem 3.5rem !important;}
+ .tl-card {padding:12px;margin-top:10px;}
+ .tl-brand-name {font-size:1.05rem;}
+ .tl-page-title {font-size:1.48rem;}
+ .tl-logo {height:39px;width:39px;}
+ .tl-line strong {font-size:.91rem;}
+ .tl-chip {font-size:.58rem;}
+ .tl-predicted span {margin-left:0;}
+ .tl-line {padding:9px 8px;}
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -270,14 +373,13 @@ def navigation():
 
 
 def header():
+    """Quiet, reusable product header — primary information is now page-local."""
     st.markdown("""
-<div class="kl-hero">
-  <div class="kl-eyebrow">FOOTBALL MARKET RESEARCH · CFB / NFL</div>
-  <div class="kl-title">Kalshi <span>Trade Lab</span></div>
-  <div class="kl-subtitle">Scan markets · Compare estimated probabilities · Track paper results</div>
-  <div style="margin-top:11px"><span class="kl-pill">● PAPER MODE · LIVE TRADING DISABLED</span></div>
+<div class="tl-brand">
+ <div class="tl-brand-name">Kalshi <span>Trade Lab</span></div>
+ <div class="tl-brand-mode">RESEARCH · NO LIVE ORDERS</div>
 </div>
-""", unsafe_allow_html=True)
+""",unsafe_allow_html=True)
 
 
 def go_to_detail(ticker, side):
