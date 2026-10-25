@@ -117,3 +117,14 @@ Matchup cards deliberately separate **market source** from **model evidence**:
 - **Known omitted factors:** verified quarterback injuries/status, weather, EPA, play-by-play efficiency, and late player news are not yet integrated.
 
 The screen recording showing all cards as `UNVERIFIED` reflected a presentation coupling error, not proof that all historical model inputs or market events were invalid. Current quotes still require source confirmation, market-time validation and matching. This fix does not add paid API calls or authorize wagers.
+
+
+## Game Day UI refresh (October 24, 2026)
+
+The app now uses a compact, phone-first visual hierarchy:
+
+- **Overview (Home):** Two immediate actions — Open Games and Open Markets — with a small cached-session status summary. The legacy scanner, paper bankroll settings, and scan history remain accessible within **Advanced scanner, bankroll settings & scan history**, collapsed by default. Merely opening Overview does not request paid odds.
+- **Games (Tonight CFB):** Compact team-logo matchups with local Central kickoff, market spread beside model spread, absolute point disagreement, projected score, game total, illustrative 20k-draw win-share bar, and model-evidence grade. Filters let you show all upcoming games, games with a market reference, or 7+ point disagreements; sorting is by kickoff or largest difference. All research details, reasons and downloads are within expandable sections.
+- **Markets, Market Detail, Portfolio, Model Lab and Advanced:** Existing data operations and navigation routes remain available, with a consistent subdued dark visual theme and easier-to-read typography. Internal route values are preserved, avoiding changes to the paper ledger or contract safety checks.
+
+**Important:** A model/book spread disagreement is not itself an edge. A quote is labeled independently as current sportsbook, older bookmaker reference, ESPN reference, or unavailable, with age/provenance respected. Model evidence rating is separate. 2025 score-only-model predictive MAE was worse than benchmark sportsbook line MAE; no green/profitable confidence classification has been introduced. No new autonomous scanning, trading, orders, deposits, or API charges were added by the redesign. All external fetches still require explicit user action.
