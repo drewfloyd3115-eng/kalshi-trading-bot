@@ -54,19 +54,22 @@ def sportsbook_api_key():
         return ""
 
 
-st.set_page_config(page_title="Kalshi Trade Lab", page_icon="📈", layout="centered")
+st.set_page_config(page_title="Kalshi Trade Lab · Game Day", page_icon="🏈", layout="centered")
 add_styles()
 header()
-st.caption("Sports UI preview 2.2 · NO-side bid validation and fee metadata · PAPER ONLY · Live trading disabled.")
-st.caption("Displayed dates and times: Central (CDT/CST, America/Chicago). Exported raw CSV timestamps remain UTC.")
+
 
 # Streamlit's native pills wrap on mobile; st.columns always stack at phone width.
 # One single-select widget controls every view without CSS-dependent navigation.
 # This never fetches odds or places orders.
 if st.session_state.get("sports_nav") not in PAGES:
     st.session_state["sports_nav"] = "Home"
+NAV_LABELS = {"Home":"Overview","Tonight CFB":"Games","Opportunities":"Markets",
+              "Market Detail":"Market Detail","Portfolio":"Portfolio",
+              "CFB Model":"Model Lab","Research":"Advanced"}
 page = st.pills("Navigate", PAGES, selection_mode="single", default="Home",
-                key="sports_nav", label_visibility="collapsed") or "Home"
+                key="sports_nav", label_visibility="collapsed",
+                format_func=lambda selected:NAV_LABELS.get(selected,selected)) or "Home"
 
 if "queue" not in st.session_state:
     st.session_state.queue = []
@@ -93,95 +96,99 @@ def total_research_exposure(other=0.0):
 
 
 if page == "Home":
-    st.subheader("One-tap CFB / NFL paper scan")
-    st.caption("Manual sportsbook comparison · One Odds API request per scan · Paper research only.")
-    quick_league = st.selectbox("Scan league", ["CFB", "NFL"], key="quick_league")
-    with st.expander("Paper bankroll & exposure settings", expanded=False):
-        quick_bankroll = st.number_input("Paper bankroll for one-tap scan ($)", min_value=1.0, value=DEFAULT_BANKROLL, key="quick_bankroll")
-        quick_exposure = st.number_input("Other open exposure ($)", min_value=0.0, value=0.0, key="quick_exposure")
-        st.caption("Position limit: 1% of bankroll; total exposure limit: 3%. Settings do not make any API requests.")
-    if st.button("Scan Now — paper only", type="primary", key="quick_scan", use_container_width=True):
-        api_key = sportsbook_api_key()
-        if not api_key:
-            st.error("Add ODDS_API_KEY to Streamlit Secrets.")
-        else:
-            try:
-                with st.spinner("Fetching fresh markets and sportsbook prices..."):
-                    quick_markets = fetch_sports_markets((quick_league,), 8)
-                    quick_rows, quick_remaining = fetch_odds(api_key, quick_league)
-                    quick_odds = pd.DataFrame(quick_rows)
-                    quick_matches = compare(quick_markets, quick_odds)
-                scan_finished_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
-                scan_result = {
-                    "league": quick_league,
-                    "markets": len(quick_markets),
-                    "sportsbook_rows": len(quick_odds),
-                    "matched": len(quick_matches),
-                    "remaining": quick_remaining,
-                    "time": scan_finished_at
-                }
-                st.session_state.quick_results = scan_result
-                st.session_state.quick_diagnostics = diagnostics(quick_markets, quick_odds)
-                st.session_state.quick_funnel = coverage_funnel(quick_odds, st.session_state.quick_diagnostics, quick_matches, quick_markets)
-                st.session_state.quick_event_audit = audit(quick_markets, quick_odds)
-                st.session_state.quick_comparisons = quick_matches
-                st.session_state.quick_eligibility = eligibility_dashboard(quick_matches, quick_odds, st.session_state.quick_results["time"])
-                st.session_state.quick_odds_cache = quick_odds
-                st.session_state.quick_markets_cache = quick_markets
-                st.session_state.paper_scan_journal = journal_rows(quick_matches, quick_league, st.session_state.quick_results["time"])
-                st.session_state.quick_routes = equivalent_routes(quick_matches)
-                st.session_state.quick_fee_analysis = fee_analysis(quick_matches)
-                st.session_state.quick_route_depth = review_routes(quick_matches, quick_bankroll, total_research_exposure(quick_exposure))
-                st.session_state.quick_depth = scan_candidates(
-                    quick_matches, quick_bankroll,
-                    total_research_exposure(quick_exposure))
-                # Commit history only after the complete scan succeeds, separately per league.
-                snapshots = st.session_state.setdefault("completed_scan_snapshots", {})
-                old = snapshots.get(quick_league)
-                if not old:
-                    old = st.session_state.get("manual_previous_snapshots", {}).get(quick_league)
-                st.session_state.previous_comparisons = old["matches"].copy() if old else pd.DataFrame()
-                st.session_state.previous_scan_time = old["time"] if old else None
-                snapshots[quick_league] = {"time": scan_finished_at, "matches": quick_matches.copy()}
+    from home_dashboard import home_dashboard
+    home_dashboard()
+    with st.expander("Advanced scanner, bankroll settings & scan history",expanded=False):
+        st.subheader("One-tap CFB / NFL paper scan")
+        st.caption("Manual sportsbook comparison · One Odds API request per scan · Paper research only.")
+        quick_league = st.selectbox("Scan league", ["CFB", "NFL"], key="quick_league")
+        with st.expander("Paper bankroll & exposure settings", expanded=False):
+            quick_bankroll = st.number_input("Paper bankroll for one-tap scan ($)", min_value=1.0, value=DEFAULT_BANKROLL, key="quick_bankroll")
+            quick_exposure = st.number_input("Other open exposure ($)", min_value=0.0, value=0.0, key="quick_exposure")
+            st.caption("Position limit: 1% of bankroll; total exposure limit: 3%. Settings do not make any API requests.")
+        if st.button("Scan Now — paper only", type="primary", key="quick_scan", use_container_width=True):
+            api_key = sportsbook_api_key()
+            if not api_key:
+                st.error("Add ODDS_API_KEY to Streamlit Secrets.")
+            else:
+                try:
+                    with st.spinner("Fetching fresh markets and sportsbook prices..."):
+                        quick_markets = fetch_sports_markets((quick_league,), 8)
+                        quick_rows, quick_remaining = fetch_odds(api_key, quick_league)
+                        quick_odds = pd.DataFrame(quick_rows)
+                        quick_matches = compare(quick_markets, quick_odds)
+                    scan_finished_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+                    scan_result = {
+                        "league": quick_league,
+                        "markets": len(quick_markets),
+                        "sportsbook_rows": len(quick_odds),
+                        "matched": len(quick_matches),
+                        "remaining": quick_remaining,
+                        "time": scan_finished_at
+                    }
+                    st.session_state.quick_results = scan_result
+                    st.session_state.quick_diagnostics = diagnostics(quick_markets, quick_odds)
+                    st.session_state.quick_funnel = coverage_funnel(quick_odds, st.session_state.quick_diagnostics, quick_matches, quick_markets)
+                    st.session_state.quick_event_audit = audit(quick_markets, quick_odds)
+                    st.session_state.quick_comparisons = quick_matches
+                    st.session_state.quick_eligibility = eligibility_dashboard(quick_matches, quick_odds, st.session_state.quick_results["time"])
+                    st.session_state.quick_odds_cache = quick_odds
+                    st.session_state.quick_markets_cache = quick_markets
+                    st.session_state.paper_scan_journal = journal_rows(quick_matches, quick_league, st.session_state.quick_results["time"])
+                    st.session_state.quick_routes = equivalent_routes(quick_matches)
+                    st.session_state.quick_fee_analysis = fee_analysis(quick_matches)
+                    st.session_state.quick_route_depth = review_routes(quick_matches, quick_bankroll, total_research_exposure(quick_exposure))
+                    st.session_state.quick_depth = scan_candidates(
+                        quick_matches, quick_bankroll,
+                        total_research_exposure(quick_exposure))
+                    # Commit history only after the complete scan succeeds, separately per league.
+                    snapshots = st.session_state.setdefault("completed_scan_snapshots", {})
+                    old = snapshots.get(quick_league)
+                    if not old:
+                        old = st.session_state.get("manual_previous_snapshots", {}).get(quick_league)
+                    st.session_state.previous_comparisons = old["matches"].copy() if old else pd.DataFrame()
+                    st.session_state.previous_scan_time = old["time"] if old else None
+                    snapshots[quick_league] = {"time": scan_finished_at, "matches": quick_matches.copy()}
 
-            except Exception as exc:
-                st.session_state.pop("previous_comparisons", None)
-                st.session_state.pop("previous_scan_time", None)
-                st.session_state.pop("quick_results", None)
-                st.session_state.pop("quick_odds_cache", None)
-                st.session_state.pop("quick_markets_cache", None)
-                st.session_state.pop("quick_comparisons", None)
-                st.session_state.pop("quick_eligibility", None)
-                st.session_state.pop("paper_scan_journal", None)
-                st.session_state.pop("quick_routes", None)
-                st.session_state.pop("quick_fee_analysis", None)
-                st.session_state.pop("quick_route_depth", None)
-                st.session_state.pop("quick_diagnostics", None)
-                st.session_state.pop("quick_funnel", None)
-                st.session_state.pop("quick_event_audit", None)
-                st.session_state.pop("quick_depth", None)
-                st.error(f"Scan failed (no trade): {exc}")
-    with st.expander("Scan history backup — no API credits", expanded=False):
-        st.caption("Save each successful scan as a CSV. If this browser session resets, import the earlier snapshot to compare it with the next completed scan. Import never approves trades.")
-        saved = st.session_state.get("completed_scan_snapshots", {}).get(quick_league)
-        if saved:
-            st.download_button("Download latest scan snapshot CSV",
-                export_snapshot(saved["matches"], quick_league, saved["time"]),
-                file_name=f"kalshi_{quick_league.lower()}_snapshot.csv", mime="text/csv")
-        else:
-            st.info("No completed scan stored for this league in this session.")
-        uploaded = st.file_uploader("Import previous snapshot CSV", type=["csv"], key="snapshot_import")
-        if uploaded is not None and st.button("Use imported snapshot as previous scan", key="use_snapshot"):
-            try:
-                current_time = st.session_state.get("quick_results", {}).get("time") if st.session_state.get("quick_results", {}).get("league") == quick_league else None
-                restored = import_snapshot(uploaded.getvalue(), quick_league, current_time)
-                st.session_state.setdefault("manual_previous_snapshots", {})[quick_league] = restored
-                st.success("Previous snapshot restored for research comparison only. No sportsbook request used.")
-            except (ValueError, pd.errors.ParserError, UnicodeError) as exc:
-                st.error(f"Snapshot rejected: {exc}")
+                except Exception as exc:
+                    st.session_state.pop("previous_comparisons", None)
+                    st.session_state.pop("previous_scan_time", None)
+                    st.session_state.pop("quick_results", None)
+                    st.session_state.pop("quick_odds_cache", None)
+                    st.session_state.pop("quick_markets_cache", None)
+                    st.session_state.pop("quick_comparisons", None)
+                    st.session_state.pop("quick_eligibility", None)
+                    st.session_state.pop("paper_scan_journal", None)
+                    st.session_state.pop("quick_routes", None)
+                    st.session_state.pop("quick_fee_analysis", None)
+                    st.session_state.pop("quick_route_depth", None)
+                    st.session_state.pop("quick_diagnostics", None)
+                    st.session_state.pop("quick_funnel", None)
+                    st.session_state.pop("quick_event_audit", None)
+                    st.session_state.pop("quick_depth", None)
+                    st.error(f"Scan failed (no trade): {exc}")
+        with st.expander("Scan history backup — no API credits", expanded=False):
+            st.caption("Save each successful scan as a CSV. If this browser session resets, import the earlier snapshot to compare it with the next completed scan. Import never approves trades.")
+            saved = st.session_state.get("completed_scan_snapshots", {}).get(quick_league)
+            if saved:
+                st.download_button("Download latest scan snapshot CSV",
+                    export_snapshot(saved["matches"], quick_league, saved["time"]),
+                    file_name=f"kalshi_{quick_league.lower()}_snapshot.csv", mime="text/csv")
+            else:
+                st.info("No completed scan stored for this league in this session.")
+            uploaded = st.file_uploader("Import previous snapshot CSV", type=["csv"], key="snapshot_import")
+            if uploaded is not None and st.button("Use imported snapshot as previous scan", key="use_snapshot"):
+                try:
+                    current_time = st.session_state.get("quick_results", {}).get("time") if st.session_state.get("quick_results", {}).get("league") == quick_league else None
+                    restored = import_snapshot(uploaded.getvalue(), quick_league, current_time)
+                    st.session_state.setdefault("manual_previous_snapshots", {})[quick_league] = restored
+                    st.success("Previous snapshot restored for research comparison only. No sportsbook request used.")
+                except (ValueError, pd.errors.ParserError, UnicodeError) as exc:
+                    st.error(f"Snapshot rejected: {exc}")
 
 
-    home_overview(quick_bankroll, quick_exposure)
+        home_overview(quick_bankroll, quick_exposure)
+
 elif page == "Opportunities":
     opportunities_page()
 elif page == "Market Detail":
