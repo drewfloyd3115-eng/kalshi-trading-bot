@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_DOWN
-import math
 from typing import Optional
 
 from config import DEFAULT_BANKROLL, MIN_EDGE_PP, MAX_TRADE_BANKROLL_PCT, MAX_TOTAL_EXPOSURE_PCT
@@ -104,6 +103,14 @@ def evaluate(candidate: Candidate, state: State = State(),
     if clock is None:
         raise ValueError("Audit clock must be timezone-aware")
     reasons = []
+    if money(policy.initial_bankroll_usd) <= 0 or not 0 < money(policy.trade_fraction) <= 1:
+        raise ValueError("Invalid risk policy")
+    if not 0 < money(policy.portfolio_fraction) <= 1 or money(policy.min_edge_pp) < 0:
+        raise ValueError("Invalid risk policy")
+    if money(policy.daily_stop_usd) <= 0 or money(policy.max_drawdown_usd) <= 0:
+        raise ValueError("Invalid loss limits")
+    if policy.max_positions < 1 or policy.max_daily_trades < 1:
+        raise ValueError("Invalid count limits")
     if candidate.venue not in VENUES:
         reasons.append("Unsupported venue")
     if not candidate.market_id or not candidate.event_key or candidate.side not in ("YES", "NO"):
@@ -130,7 +137,7 @@ def evaluate(candidate: Candidate, state: State = State(),
         reasons.append("Insufficient verified whole-share ask depth")
     quote = when(candidate.quote_at_utc)
     estimate = when(candidate.estimate_at_utc)
-    if quote is None or (clock - quote).total_seconds() not in range(0, policy.max_price_age_seconds + 1):
+    if quote is None or not 0 <= (clock - quote).total_seconds() <= policy.max_price_age_seconds:
         reasons.append("Missing, stale or future order-book quote")
     if estimate is None or not 0 <= (clock - estimate).total_seconds() <= policy.max_model_age_seconds:
         reasons.append("Missing, stale or future model estimate")
