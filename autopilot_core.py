@@ -117,7 +117,11 @@ def evaluate(candidate: Candidate, state: State = State(),
         reasons.append("Incomplete market identity or contract side")
     if not candidate.market_open:
         reasons.append("Market is not confirmed open")
-    if not candidate.binary_settlement_verified or money(candidate.payout_usd) != 1:
+    try:
+        payout = money(candidate.payout_usd, "payout")
+    except ValueError:
+        payout = Decimal(0)
+    if not candidate.binary_settlement_verified or payout != 1:
         reasons.append("Binary $1 settlement and outcome rules not verified")
     if not candidate.fee_schedule_verified:
         reasons.append("Applicable trading fee not verified")
@@ -127,10 +131,21 @@ def evaluate(candidate: Candidate, state: State = State(),
         reasons.append("Independent calibrated probability model missing")
     if candidate.fair_probability is None:
         reasons.append("No validated fair probability")
-    price, fee = money(candidate.ask_cents,"ask price"), money(candidate.fee_per_share_usd,"fee")
+    try:
+        price, fee = money(candidate.ask_cents, "ask price"), money(candidate.fee_per_share_usd, "fee")
+    except ValueError:
+        price, fee = Decimal(0), Decimal(0)
+        reasons.append("Invalid share price or fee: nonfinite value")
     if not 0 < price < 100 or fee < 0:
         reasons.append("Invalid share price or fee")
-    fair = None if candidate.fair_probability is None else money(candidate.fair_probability,"fair probability")
+    if candidate.fair_probability is None:
+        fair = None
+    else:
+        try:
+            fair = money(candidate.fair_probability, "fair probability")
+        except ValueError:
+            fair = None
+            reasons.append("Invalid fair probability")
     if fair is not None and not 0 <= fair <= 1:
         reasons.append("Fair probability outside [0,1]")
     if isinstance(candidate.depth_whole_shares, bool) or not isinstance(candidate.depth_whole_shares, int) or candidate.depth_whole_shares < 1:
