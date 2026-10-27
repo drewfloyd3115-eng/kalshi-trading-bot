@@ -107,5 +107,39 @@ class AppIntegrationTests(unittest.TestCase):
             self.assertEqual(float(app.session_state.get("quick_bankroll",100)),100)
 
 
+    def test_manual_scan_depth_inspection_does_not_create_a_position(self):
+        from streamlit.testing.v1 import AppTest
+        from position_ledger import ledger_summary
+        future = (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat()
+        markets = pd.DataFrame([{
+            "league":"NFL", "event":"Example vs Sample",
+            "ticker":"KXNFLGAME-EXAMPLE", "yes_ask_cents":95,
+            "no_ask_cents":6, "volume":100, "close_time":future,
+        }])
+        with patch("near_certainty_ui.fetch_sports_markets", return_value=markets) as feed, \
+             patch("near_certainty_ui.fetch_orderbook",
+                   return_value={"yes_bids":[],"no_bids":[[5,20]]}) as depth:
+            app=AppTest.from_file("app.py",default_timeout=30).run()
+            app.button_group(key="sports_nav").set_value("Near Certainty").run()
+            self.assertFalse(app.exception,str(app.exception))
+            self.assertEqual(app.session_state["position_ledger"].shape[0],0)
+            self.assertEqual(feed.call_count,0)
+            self.assertEqual(depth.call_count,0)
+            app.button(key="nc_scan").click().run()
+            self.assertFalse(app.exception,str(app.exception))
+            self.assertEqual(feed.call_count,1)
+            self.assertEqual(depth.call_count,0)
+            self.assertEqual(len(app.session_state["nc_watchlist"]),1)
+            app.button(key="nc_inspect").click().run()
+            self.assertFalse(app.exception,str(app.exception))
+            self.assertEqual(depth.call_count,1)
+            result=app.session_state["nc_depth_result"]
+            self.assertAlmostEqual(result["cost_usd"],0.96)
+            self.assertFalse(result["paper_fill_recorded"])
+            self.assertFalse(result["real_order_placed"])
+            self.assertEqual(ledger_summary(app.session_state["position_ledger"])["transactions"],0)
+            self.assertEqual(ledger_summary(app.session_state["position_ledger"])["open_cost_usd"],0)
+
+
 if __name__=="__main__":
     unittest.main()
