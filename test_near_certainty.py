@@ -103,7 +103,7 @@ class AppIntegrationTests(unittest.TestCase):
             app=app.button_group(key="sports_nav").set_value("Near Certainty").run()
             self.assertFalse(app.exception,str(app.exception))
             self.assertIn("Near-Certainty", " ".join(str(s.value) for s in app.subheader))
-            self.assertIn("no proven +EV", " ".join(str(a.message) for a in app.warning))
+            self.assertIn("no proven +EV", " ".join(str(a.value) for a in app.warning))
             self.assertEqual(float(app.session_state.get("quick_bankroll",100)),100)
 
 
