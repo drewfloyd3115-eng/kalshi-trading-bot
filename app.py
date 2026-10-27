@@ -64,7 +64,7 @@ header()
 # This never fetches odds or places orders.
 if st.session_state.get("sports_nav") not in PAGES:
     st.session_state["sports_nav"] = "Home"
-NAV_LABELS = {"Home":"Overview","Tonight CFB":"Games","Opportunities":"Markets",
+NAV_LABELS = {"Home":"Overview","Tonight CFB":"Games","Opportunities":"Markets", "Near Certainty":"95¢ Watch",
               "Market Detail":"Market Detail","Portfolio":"Portfolio",
               "CFB Model":"Model Lab","Research":"Advanced"}
 page = st.pills("Navigate", PAGES, selection_mode="single", default="Home",
@@ -189,6 +189,9 @@ if page == "Home":
 
         home_overview(quick_bankroll, quick_exposure)
 
+elif page == "Near Certainty":
+    from near_certainty_ui import render_near_certainty
+    render_near_certainty()
 elif page == "Opportunities":
     opportunities_page()
 elif page == "Market Detail":
