@@ -100,11 +100,9 @@ class AppIntegrationTests(unittest.TestCase):
         with patch("scanner.fetch_sports_markets",side_effect=AssertionError("Network on page load")):
             app=AppTest.from_file("app.py",default_timeout=30).run()
             self.assertFalse(app.exception,str(app.exception))
-            app.session_state["sports_nav"]="Near Certainty"
-            app=app.run()
+            app=app.button_group(key="sports_nav").set_value("Near Certainty").run()
             self.assertFalse(app.exception,str(app.exception))
-            labels=" ".join(str(m.value) for m in app.markdown)
-            self.assertIn("Near-Certainty",labels)
+            self.assertIn("Near-Certainty", " ".join(str(s.value) for s in app.subheader))
             self.assertIn("no proven +EV", " ".join(str(a.message) for a in app.warning))
             self.assertEqual(float(app.session_state.get("quick_bankroll",100)),100)
 
